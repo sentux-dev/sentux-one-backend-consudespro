@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CRM\ActivityController;
 use App\Http\Controllers\Api\User\Profile\MfaController;
 use App\Http\Controllers\Api\User\Profile\PersonalDataController;
 use App\Http\Controllers\Api\User\Profile\PreferencesController;
@@ -74,13 +75,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/contacts/{contact}', [ContactController::class, 'destroy']);
     Route::patch('/contacts/{contact}/reactivate', [ContactController::class, 'reactivate']);
 
+    Route::prefix('crm')->group(function () {
+        Route::get('contacts/{id}/activities', [ActivityController::class, 'index']);
+        Route::post('activities', [ActivityController::class, 'store']);
+        Route::delete('activities/{activity}', [ActivityController::class, 'destroy']); // Opcional
+    });
+
     Route::prefix('crm/lookups')->group(function () {
-    Route::get('/projects', [ContactLookupController::class, 'projects']);
-    Route::get('/campaigns', [ContactLookupController::class, 'campaigns']);
-    Route::get('/origins', [ContactLookupController::class, 'origins']);
-    Route::get('/owners', [ContactLookupController::class, 'owners']);
-    Route::get('/status', [ContactLookupController::class, 'status']);
-    Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
-});
+        Route::get('/projects', [ContactLookupController::class, 'projects']);
+        Route::get('/campaigns', [ContactLookupController::class, 'campaigns']);
+        Route::get('/origins', [ContactLookupController::class, 'origins']);
+        Route::get('/owners', [ContactLookupController::class, 'owners']);
+        Route::get('/status', [ContactLookupController::class, 'status']);
+        Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
+    });
+
 
 });
