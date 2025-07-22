@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\User\Profile\PersonalDataController;
 use App\Http\Controllers\Api\User\Profile\PreferencesController;
 use App\Http\Controllers\Api\User\Profile\SecurityDataController;
 use App\Http\Controllers\Api\User\SessionController;
+use App\Http\Controllers\Api\User\UserController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -55,5 +56,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('sessions/{id}', [SessionController::class, 'destroy']);
     });
 
+    // Lista de usuarios
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::put('/users/{user}', [UserController::class, 'update']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
 
 });
