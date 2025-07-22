@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\User\Profile\PreferencesController;
 use App\Http\Controllers\Api\User\Profile\SecurityDataController;
 use App\Http\Controllers\Api\User\SessionController;
 use App\Http\Controllers\Api\User\UserController;
+use App\Http\Controllers\Api\CRM\ContactController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -61,5 +62,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/users/{user}', [UserController::class, 'update']);
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
+
+    // Rutas de CRM
+    Route::get('/contacts', [ContactController::class, 'index']);
+    Route::post('/contacts', [ContactController::class, 'store']);
+    Route::get('/contacts/{contact}', [ContactController::class, 'show']);
+    Route::put('/contacts/{contact}', [ContactController::class, 'update']);
+    Route::delete('/contacts/{contact}', [ContactController::class, 'destroy']);
+    Route::patch('/contacts/{contact}/reactivate', [ContactController::class, 'reactivate']);
 
 });

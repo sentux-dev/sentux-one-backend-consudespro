@@ -1,0 +1,298 @@
+<?php
+
+namespace App\Http\Controllers\Api\CRM;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\CRM\ContactCollection;
+use App\Http\Resources\CRM\ContactResource;
+use Illuminate\Http\Request;
+use App\Models\Crm\Contact;
+use App\Models\Crm\Campaign;
+use App\Models\Crm\Origin;
+use App\Models\Crm\Deal;
+use App\Models\RealState\Project;
+use App\Models\Log;
+use Illuminate\Support\Facades\DB;
+
+class ContactController extends Controller
+{
+    /**
+     * Listar contactos con paginación, filtros y relaciones.
+     */
+    public function index(Request $request)
+    {
+        $query = Contact::with([
+        'status',
+        'disqualificationReason',
+        'owner',
+        'deals:id,name',
+        'campaigns:id,name',
+        'origins:id,name',
+        'projects:id,name'
+        ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
+
+        // Filtros básicos
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%$search%")
+                  ->orWhere('last_name', 'like', "%$search%")
+                  ->orWhere('email', 'like', "%$search%")
+                  ->orWhere('cellphone', 'like', "%$search%");
+            });
+        }
+
+        if ($request->filled('status_id')) {
+            $query->where('contact_status_id', $request->status_id);
+        }
+
+        if ($request->filled('owner_id')) {
+            $query->where('owner_id', $request->owner_id);
+        }
+
+        if ($request->filled('active')) {
+            $query->where('active', $request->active);
+        }
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
+        }
+
+        $contacts = $query->paginate($request->get('per_page', 10));
+        
+        return new ContactCollection($contacts);
+        return response()->json($contacts);
+        // return ContactResource::collection($contacts);
+    }
+
+    /**
+     * Crear un nuevo contacto.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'cellphone' => 'nullable|string|max:50',
+            'phone' => 'nullable|string|max:50',
+            'email' => 'required|email|unique:crm_contacts,email',
+            'contact_status_id' => 'required|exists:crm_contact_statuses,id',
+            'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
+            'owner_id' => 'nullable|exists:users,id',
+            'occupation' => 'nullable|string|max:255',
+            'birthdate' => 'nullable|date',
+            'address' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:255',
+            'deals' => 'array',
+            'campaigns' => 'array',
+            'origins' => 'array',
+            'projects' => 'array',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $contact = Contact::create($validated);
+
+            // Relaciones
+            if (!empty($validated['deals'])) {
+                $contact->deals()->attach($validated['deals']);
+            }
+
+            if (!empty($validated['campaigns'])) {
+                $contact->campaigns()->attach($validated['campaigns'], ['is_original' => true, 'is_last' => true]);
+            }
+
+            if (!empty($validated['origins'])) {
+                $contact->origins()->attach($validated['origins'], ['is_original' => true, 'is_last' => true]);
+            }
+
+            if (!empty($validated['projects'])) {
+                $contact->projects()->attach($validated['projects']);
+            }
+
+            // Log
+            $this->logAction('create_contact', 'Contact', $contact->id, $contact->toArray());
+
+            DB::commit();
+
+            return response()->json(['message' => 'Contacto creado correctamente', 'contact' => $contact], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error al crear contacto', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Ver un contacto con sus relaciones.
+     */
+    public function show(Contact $contact)
+    {
+        $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
+        return new ContactResource($contact);
+    }
+
+    /**
+     * Actualizar un contacto.
+     */
+    public function update(Request $request, Contact $contact)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'cellphone' => 'nullable|string|max:50',
+            'phone' => 'nullable|string|max:50',
+            'email' => "required|email|unique:crm_contacts,email,{$contact->id}",
+            'contact_status_id' => 'required|exists:crm_contact_statuses,id',
+            'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
+            'owner_id' => 'nullable|exists:users,id',
+            'occupation' => 'nullable|string|max:255',
+            'birthdate' => 'nullable|date',
+            'address' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:255',
+            'deals' => 'array',
+            'campaigns' => 'array',
+            'origins' => 'array',
+            'projects' => 'array',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $oldData = $contact->toArray();
+
+            // Actualizar solo campos del modelo principal
+            $contact->update($validated);
+
+            // Sincronizar relaciones
+            $contact->deals()->sync($validated['deals'] ?? []);
+            $contact->campaigns()->sync($validated['campaigns'] ?? []);
+            $contact->origins()->sync($validated['origins'] ?? []);
+            $contact->projects()->sync($validated['projects'] ?? []);
+
+            // Capturar solo cambios reales en los campos del contacto
+            $changedFields = [];
+            foreach ($contact->getChanges() as $field => $newValue) {
+                // Omitimos timestamps para evitar ruido en los logs
+                if (in_array($field, ['updated_at', 'created_at'])) {
+                    continue;
+                }
+                $changedFields[$field] = [
+                    'old' => $oldData[$field] ?? null,
+                    'new' => $newValue
+                ];
+            }
+
+            // Si también quieres registrar cambios en relaciones
+            $relationChanges = [];
+            if (isset($validated['deals'])) {
+                $relationChanges['deals'] = $validated['deals'];
+            }
+            if (isset($validated['campaigns'])) {
+                $relationChanges['campaigns'] = $validated['campaigns'];
+            }
+            if (isset($validated['origins'])) {
+                $relationChanges['origins'] = $validated['origins'];
+            }
+            if (isset($validated['projects'])) {
+                $relationChanges['projects'] = $validated['projects'];
+            }
+
+            $logData = [
+                'fields' => $changedFields,
+                'relations' => $relationChanges
+            ];
+
+            // Registrar log solo si hay cambios
+            if (!empty($changedFields) || !empty($relationChanges)) {
+                $this->logAction('update_contact', 'Contact', $contact->id, $logData);
+            }
+
+            DB::commit();
+
+            return response()->json(['message' => 'Contacto actualizado correctamente', 'contact' => $contact]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error al actualizar contacto', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Eliminar o desactivar un contacto.
+     */
+    public function destroy(Contact $contact)
+    {
+        DB::beginTransaction();
+        if ($contact->trashed()) {
+            return response()->json(['message' => 'El contacto ya está eliminado o desactivado'], 409);
+        }
+        try {
+            if ($contact->deals()->exists() || $contact->projects()->exists() || $contact->campaigns()->exists()) {
+                $contact->active = false;
+                $contact->save();
+                $message = 'Contacto desactivado correctamente por tener relaciones activas';
+            } else {
+                $contact->delete();
+                $message = 'Contacto eliminado correctamente';
+            }
+
+            $this->logAction('delete_contact', 'Contact', $contact->id, ['message' => $message]);
+
+            DB::commit();
+            return response()->json(['message' => $message]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error al eliminar contacto', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Reactivar un contacto (cuando reingresa).
+     */
+    public function reactivate(Request $request, Contact $contact)
+    {
+        $validated = $request->validate([
+            'campaign_id' => 'nullable|exists:crm_campaigns,id',
+            'origin_id' => 'nullable|exists:crm_origins,id',
+        ]);
+
+        $contact->active = true;
+        $contact->save();
+
+        // Actualizar última campaña y origen si se envían
+        if (!empty($validated['campaign_id'])) {
+            $contact->campaigns()->updateExistingPivot($validated['campaign_id'], [
+                'is_last' => true
+            ]);
+        }
+
+        if (!empty($validated['origin_id'])) {
+            $contact->origins()->updateExistingPivot($validated['origin_id'], [
+                'is_last' => true
+            ]);
+        }
+
+        $this->logAction('reactivate_contact', 'Contact', $contact->id, [
+            'message' => 'Contacto reactivado',
+            'campaign_id' => $validated['campaign_id'] ?? null,
+            'origin_id' => $validated['origin_id'] ?? null,
+        ]);
+
+        return response()->json(['message' => 'Contacto reactivado correctamente']);
+    }
+
+    /**
+     * Registrar un log genérico.
+     */
+    private function logAction(string $action, string $entityType, ?int $entityId, $changes = null)
+    {
+        Log::create([
+            'user_id' => auth()->id(),
+            'action' => $action,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'changes' => $changes ? json_encode($changes) : null,
+        ]);
+    }
+}
