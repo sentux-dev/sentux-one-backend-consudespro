@@ -13,6 +13,8 @@ use App\Models\Crm\Deal;
 use App\Models\RealState\Project;
 use App\Models\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 
 class ContactController extends Controller
 {
@@ -80,34 +82,75 @@ class ContactController extends Controller
             'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
             'owner_id' => 'nullable|exists:users,id',
             'occupation' => 'nullable|string|max:255',
+            'job_position' => 'nullable|string|max:255',
             'birthdate' => 'nullable|date',
             'address' => 'nullable|string|max:255',
             'country' => 'nullable|string|max:255',
-            'deals' => 'array',
-            'campaigns' => 'array',
-            'origins' => 'array',
-            'projects' => 'array',
+
+            // Relaciones
+            'deals' => 'nullable|array',
+            'deals.*' => 'integer|exists:crm_deals,id',
+
+            'projects' => 'nullable|array',
+            'projects.*' => 'integer|exists:real_state_projects,id',
+
+            'campaigns' => 'nullable|array',
+            'campaigns.*' => 'integer|exists:crm_campaigns,id',
+
+            'origins' => 'nullable|array',
+            'origins.*' => 'integer|exists:crm_origins,id',
         ]);
 
         DB::beginTransaction();
         try {
-            $contact = Contact::create($validated);
+            // Crear el contacto
+            $contact = Contact::create([
+                'first_name' => $validated['first_name'],
+                'last_name' => $validated['last_name'] ?? null,
+                'cellphone' => $validated['cellphone'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+                'email' => $validated['email'],
+                'contact_status_id' => $validated['contact_status_id'],
+                'disqualification_reason_id' => $validated['disqualification_reason_id'] ?? null,
+                'owner_id' => $validated['owner_id'] ?? null,
+                'occupation' => $validated['occupation'] ?? null,
+                'job_position' => $validated['job_position'] ?? null,
+                'birthdate' => $validated['birthdate'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'country' => $validated['country'] ?? null,
+            ]);
 
-            // Relaciones
+            // Guardar relaciones
             if (!empty($validated['deals'])) {
                 $contact->deals()->attach($validated['deals']);
             }
 
+            if (!empty($validated['projects'])) {
+                $contact->projects()->attach($validated['projects']);
+            }
+
             if (!empty($validated['campaigns'])) {
-                $contact->campaigns()->attach($validated['campaigns'], ['is_original' => true, 'is_last' => true]);
+                // Marcar la primera campaña como original y la última como is_last
+                $contact->campaigns()->attach(collect($validated['campaigns'])->mapWithKeys(function ($id, $index) use ($validated) {
+                    return [
+                        $id => [
+                            'is_original' => $index === 0,
+                            'is_last' => $index === array_key_last($validated['campaigns']),
+                        ]
+                    ];
+                })->toArray());
             }
 
             if (!empty($validated['origins'])) {
-                $contact->origins()->attach($validated['origins'], ['is_original' => true, 'is_last' => true]);
-            }
-
-            if (!empty($validated['projects'])) {
-                $contact->projects()->attach($validated['projects']);
+                // Igual que con campañas: original y última
+                $contact->origins()->attach(collect($validated['origins'])->mapWithKeys(function ($id, $index) use ($validated) {
+                    return [
+                        $id => [
+                            'is_original' => $index === 0,
+                            'is_last' => $index === array_key_last($validated['origins']),
+                        ]
+                    ];
+                })->toArray());
             }
 
             // Log
@@ -115,7 +158,10 @@ class ContactController extends Controller
 
             DB::commit();
 
-            return response()->json(['message' => 'Contacto creado correctamente', 'contact' => $contact], 201);
+            return response()->json([
+                'message' => 'Contacto creado correctamente',
+                'contact' => $contact->load(['status', 'owner', 'deals', 'projects', 'campaigns', 'origins'])
+            ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -147,6 +193,7 @@ class ContactController extends Controller
             'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
             'owner_id' => 'nullable|exists:users,id',
             'occupation' => 'nullable|string|max:255',
+            'job_position' => 'nullable|string|max:255',
             'birthdate' => 'nullable|date',
             'address' => 'nullable|string|max:255',
             'country' => 'nullable|string|max:255',
@@ -215,6 +262,77 @@ class ContactController extends Controller
             DB::rollBack();
             return response()->json(['message' => 'Error al actualizar contacto', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    public function updatePatch(Request $request, Contact $contact): JsonResponse
+    {
+        // ✅ Validación previa (opcional, pero mejora UX)
+        if ($request->has('email') && $request->email !== $contact->email) {
+            $exists = Contact::where('email', $request->email)
+                ->where('id', '<>', $contact->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'message' => 'El correo electrónico ya está asociado a otro contacto.'
+                ], 422);
+            }
+        }
+
+        try {
+            $contact->fill($request->only([
+                'first_name',
+                'last_name',
+                'phone',
+                'cellphone',
+                'email',
+                'occupation',
+                'job_position',
+                'current_company',
+                'birthdate',
+                'contact_status_id',
+                'lead_status',
+                'owner_id',
+                'interest_project',
+                'source',
+                'disqualification_reason_id',
+                'address',
+                'country',
+            ]));
+
+            $contact->save();
+            $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
+
+            return (new ContactResource($contact))
+                ->response()
+                ->setStatusCode(200);
+
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23000') {
+                return response()->json([
+                    'message' => 'El correo electrónico ya está asociado a otro contacto.'
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => 'Error al actualizar el contacto',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateBasic(Request $request, Contact $contact)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'position' => 'nullable|string|max:255',
+        ]);
+
+        $contact->update($validated);
+        $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
+
+        return new ContactResource($contact);
     }
 
     /**

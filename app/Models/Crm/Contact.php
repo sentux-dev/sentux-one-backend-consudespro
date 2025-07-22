@@ -22,6 +22,8 @@ class Contact extends Model
         'disqualification_reason_id',
         'owner_id',
         'occupation',
+        'job_position',
+        'current_company',
         'birthdate',
         'address',
         'country',
@@ -30,7 +32,7 @@ class Contact extends Model
 
     protected $casts = [
         'active' => 'boolean',
-        'birthdate' => 'date',
+        'birthdate' => 'date:Y-m-d', // 🔹 Esto obliga a serializar solo la fecha
     ];
 
     /** ============================

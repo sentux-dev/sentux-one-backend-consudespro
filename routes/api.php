@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\User\Profile\SecurityDataController;
 use App\Http\Controllers\Api\User\SessionController;
 use App\Http\Controllers\Api\User\UserController;
 use App\Http\Controllers\Api\CRM\ContactController;
+use App\Http\Controllers\Api\CRM\ContactLookupController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -68,7 +69,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/contacts', [ContactController::class, 'store']);
     Route::get('/contacts/{contact}', [ContactController::class, 'show']);
     Route::put('/contacts/{contact}', [ContactController::class, 'update']);
+    Route::put('/contacts/{contact}/basic', [ContactController::class, 'updateBasic']);
+    Route::patch('/contacts/{contact}/patch', [ContactController::class, 'updatePatch']);
     Route::delete('/contacts/{contact}', [ContactController::class, 'destroy']);
     Route::patch('/contacts/{contact}/reactivate', [ContactController::class, 'reactivate']);
+
+    Route::prefix('crm/lookups')->group(function () {
+    Route::get('/projects', [ContactLookupController::class, 'projects']);
+    Route::get('/campaigns', [ContactLookupController::class, 'campaigns']);
+    Route::get('/origins', [ContactLookupController::class, 'origins']);
+    Route::get('/owners', [ContactLookupController::class, 'owners']);
+    Route::get('/status', [ContactLookupController::class, 'status']);
+    Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
+});
 
 });

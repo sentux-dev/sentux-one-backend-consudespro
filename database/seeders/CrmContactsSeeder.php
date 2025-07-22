@@ -37,6 +37,7 @@ class CrmContactsSeeder extends Seeder
                 'disqualification_reason_id' => $faker->optional()->randomElement($reasons),
                 'owner_id' => $faker->optional()->randomElement($users),
                 'occupation' => $faker->jobTitle,
+                'job_position' => $faker->optional()->jobTitle,
                 'birthdate' => $faker->optional()->date(),
                 'address' => $faker->address,
                 'country' => $faker->country,
