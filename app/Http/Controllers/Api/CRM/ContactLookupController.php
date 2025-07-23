@@ -12,74 +12,57 @@ use App\Models\User;
 
 class ContactLookupController extends Controller
 {
-    /**
-     * Obtener lista de proyectos activos (Real State).
-     */
     public function projects()
     {
         $projects = Project::where('active', true)
             ->orderBy('order')
             ->get(['id as value', 'name as label']);
 
-        return response()->json($projects);
+        return response()->json(['data' => $projects]);
     }
 
-    /**
-     * Obtener lista de campañas activas.
-     */
     public function campaigns()
     {
         $campaigns = Campaign::where('active', true)
             ->orderBy('order')
             ->get(['id as value', 'name as label']);
 
-        return response()->json($campaigns);
+        return response()->json(['data' => $campaigns]);
     }
 
-    /**
-     * Obtener lista de orígenes activos.
-     */
     public function origins()
     {
         $origins = Origin::where('active', true)
             ->orderBy('order')
             ->get(['id as value', 'name as label']);
 
-        return response()->json($origins);
+        return response()->json(['data' => $origins]);
     }
 
-    /**
-     * Obtener lista de usuarios activos.
-     */
     public function owners()
     {
         $owners = User::where('active', true)
             ->orderBy('name')
             ->get(['id as value', 'name as label']);
 
-        return response()->json($owners);
+        return response()->json(['data' => $owners]);
     }
 
-    /**
-     * Obtener lista de estados de contacto activos.
-     */
     public function status()
     {
         $status = ContactStatus::where('active', true)
-            ->orderBy('name')
+            ->orderBy('order')
             ->get(['id as value', 'name as label']);
 
-        return response()->json($status);
+        return response()->json(['data' => $status]);
     }
 
-    /**
-     * Obtener lista de razones de descalificación activas.
-     */
     public function disqualificationReasons()
     {
         $reasons = DisqualificationReason::where('active', true)
             ->orderBy('name')
             ->get(['id as value', 'name as label']);
-        return response()->json($reasons);
+
+        return response()->json(['data' => $reasons]);
     }
 }

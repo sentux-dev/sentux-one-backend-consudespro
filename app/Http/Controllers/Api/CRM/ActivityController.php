@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
 use App\Models\CRM\Activity;
+use App\Models\CRM\Task;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class ActivityController extends Controller
@@ -47,10 +49,32 @@ class ActivityController extends Controller
         ]);
 
         // Asignar el usuario autenticado como creador de la actividad
-        $validated['created_by'] = auth()->id();
-        $validated['updated_by'] = auth()->id(); // También asignamos el actualizador
+        $validated['created_by'] = Auth::id();
+        $validated['updated_by'] = Auth::id(); // También asignamos el actualizador
 
         $activity = Activity::create($validated);
+
+        // ✅ Si es una tarea, crear el registro en crm_tasks
+        if ($activity->type === 'tarea') {
+            Task::create([
+                'contact_id' => $activity->contact_id,
+                'activity_id' => $activity->id,
+                'description' => $activity->description ?? null,
+                'status' => 'pendiente',
+                'schedule_date' => $activity->schedule_date,
+                'remember_date' => $activity->remember_date,
+                'action_type' => $activity->task_action_type,
+                'created_by' => Auth::id(),
+                'updated_by' => Auth::id()
+            ]);
+
+            // si no viene owner_id, asignar el creador de la tarea
+            if (empty($request->owner_id)) {
+                $activity->task->owner_id = Auth::id();
+                $activity->task->save();
+            }
+        }
+
 
         return response()->json([
             'message' => 'Actividad creada exitosamente',

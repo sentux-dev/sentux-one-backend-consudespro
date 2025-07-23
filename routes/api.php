@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\User\SessionController;
 use App\Http\Controllers\Api\User\UserController;
 use App\Http\Controllers\Api\CRM\ContactController;
 use App\Http\Controllers\Api\CRM\ContactLookupController;
+use App\Http\Controllers\Api\CRM\TaskController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -79,6 +80,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('contacts/{id}/activities', [ActivityController::class, 'index']);
         Route::post('activities', [ActivityController::class, 'store']);
         Route::delete('activities/{activity}', [ActivityController::class, 'destroy']); // Opcional
+
+        // ✅ Vista tipo tabla general
+        Route::get('/tasks', [TaskController::class, 'listTasks']);
+        // ✅ Tareas de un contacto específico (Tab en Contact Detail)
+        Route::get('/contacts/{contact}/tasks', [TaskController::class, 'listTasksByContact']);
+        // ✅ CRUD
+        Route::post('/tasks', [TaskController::class, 'createTask']);
+        Route::put('/tasks/{task}', [TaskController::class, 'updateTask']);
+        Route::delete('/tasks/{task}', [TaskController::class, 'deleteTask']);
     });
 
     Route::prefix('crm/lookups')->group(function () {

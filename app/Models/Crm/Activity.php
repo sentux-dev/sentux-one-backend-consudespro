@@ -32,7 +32,7 @@ class Activity extends Model
     protected $appends = ['date', 'created_by_name'];
     public function getDateAttribute()
     {
-        return $this->created_at->format('Y-m-d H:i:s');
+        return $this->created_at;
     }
 
     public function getCreatedByNameAttribute()
@@ -56,5 +56,10 @@ class Activity extends Model
     public function updatedBy()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function task()
+    {
+        return $this->hasOne(Task::class, 'activity_id');
     }
 }
