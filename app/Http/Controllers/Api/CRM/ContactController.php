@@ -94,21 +94,25 @@ class ContactController extends Controller
             $query->leftJoin('crm_contact_crm_deal', 'crm_contacts.id', '=', 'crm_contact_crm_deal.crm_contact_id')
                 ->leftJoin('crm_deals', 'crm_contact_crm_deal.crm_deal_id', '=', 'crm_deals.id')
                 ->select('crm_contacts.*')
+                ->distinct()
                 ->orderBy('crm_deals.name', $sortOrder);
         } else if ($sortField === 'campaigns_names') {
             $query->leftJoin('crm_campaign_crm_contact', 'crm_contacts.id', '=', 'crm_campaign_crm_contact.crm_contact_id')
                 ->leftJoin('crm_campaigns', 'crm_campaign_crm_contact.crm_campaign_id', '=', 'crm_campaigns.id')
                 ->select('crm_contacts.*')
+                ->distinct()
                 ->orderBy('crm_campaigns.name', $sortOrder);
         } else if ($sortField === 'origins_names') {
             $query->leftJoin('crm_origin_crm_contact', 'crm_contacts.id', '=', 'crm_origin_crm_contact.crm_contact_id')
                 ->leftJoin('crm_origins', 'crm_origin_crm_contact.crm_origin_id', '=', 'crm_origins.id')
                 ->select('crm_contacts.*')
+                ->distinct()
                 ->orderBy('crm_origins.name', $sortOrder);
         } else if ($sortField === 'projects_names') {
             $query->leftJoin('crm_contact_real_state_project', 'crm_contacts.id', '=', 'crm_contact_real_state_project.crm_contact_id')
                 ->leftJoin('real_state_projects', 'crm_contact_real_state_project.real_state_project_id', '=', 'real_state_projects.id')
                 ->select('crm_contacts.*')
+                ->distinct()
                 ->orderBy('real_state_projects.name', $sortOrder);
         } else {
             $query->orderBy($sortField, $sortOrder);
@@ -364,6 +368,7 @@ class ContactController extends Controller
             ]));
 
             $contact->save();
+            
             $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
 
             return (new ContactResource($contact))

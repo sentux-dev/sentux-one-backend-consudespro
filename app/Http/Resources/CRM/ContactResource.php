@@ -55,6 +55,22 @@ class ContactResource extends JsonResource
             'origins_names' => $this->origins->pluck('name')->toArray(),
             'projects_names' => $this->projects->pluck('name')->toArray(),
 
+            // ✅ Campos personalizados
+            'custom_field_values' => $this->whenLoaded('customFieldValues', function () {
+                return $this->customFieldValues->map(function ($fieldValue) {
+                    return [
+                        'id' => $fieldValue->id,
+                        'field_id' => $fieldValue->customField->id,
+                        'name' => $fieldValue->customField->name,
+                        'label' => $fieldValue->customField->label,
+                        'type' => $fieldValue->customField->type,
+                        'options' => $fieldValue->customField->options,
+                        'value' => $fieldValue->value
+                    ];
+                });
+            }),
+
+
             // ✅ Contadores
             'deals_count' => $this->whenCounted('deals'),
             'campaigns_count' => $this->whenCounted('campaigns'),

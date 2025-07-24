@@ -98,4 +98,10 @@ class Contact extends Model
         $lastActivity = $this->activities()->latest('created_at')->first();
         return $lastActivity ? $lastActivity->created_at : null;
     }
+
+    public function customFieldValues()
+    {
+        return $this->hasMany(ContactCustomFieldValue::class, 'contact_id')
+            ->with('field');
+    }
 }

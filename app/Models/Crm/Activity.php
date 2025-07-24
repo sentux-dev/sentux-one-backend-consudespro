@@ -25,7 +25,8 @@ class Activity extends Model
 
     protected $casts = [
         'schedule_date' => 'datetime',
-        'remember_date' => 'datetime'
+        'remember_date' => 'datetime',
+        'created_at' => 'datetime',
     ];
 
     // cuando consulten enviar un campo adicional date con la fecha de created_at y created_by_name

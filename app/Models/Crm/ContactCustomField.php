@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models\Crm;
+namespace App\Models\CRM;
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -8,10 +8,22 @@ class ContactCustomField extends Model
 {
     protected $table = 'crm_contact_custom_fields';
 
-    protected $fillable = ['contact_id', 'field_key', 'field_value'];
+    protected $fillable = [
+        'name',
+        'label',
+        'type',
+        'options',
+        'active',
+    ];
 
-    public function contact()
+    protected $casts = [
+        'options' => 'array',
+        'active' => 'boolean',
+    ];
+
+    // 🔹 Relación con los valores de los contactos
+    public function values()
     {
-        return $this->belongsTo(Contact::class);
+        return $this->hasMany(ContactCustomFieldValue::class, 'custom_field_id');
     }
 }
