@@ -14,12 +14,21 @@ class ContactResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'name' => $this->first_name . ' ' . $this->last_name,
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,
             'email' => $this->email,
             'cellphone' => $this->cellphone,
             'phone' => $this->phone,
+            'occupation' => $this->occupation,
+            'job_position' => $this->job_position,
+            'current_company' => $this->current_company,
+            'birthdate' => $this->birthdate,
+            'address' => $this->address,
+            'country' => $this->country,
             'active' => $this->active,
+            'last_activity' => $this->last_activity,
+            'position' => $this->position,
 
             // ✅ Estado del lead
             'status' => $this->status ? [
@@ -54,6 +63,11 @@ class ContactResource extends JsonResource
 
             // ✅ Fechas
             'created_at' => $this->created_at ? $this->created_at->toISOString() : null,
+
+            // Newsletter subscription
+            'newsletter' => false,
+            'productUpdated' => false,
+            'promotions' => false,
         ];
     }
 }

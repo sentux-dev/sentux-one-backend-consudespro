@@ -256,6 +256,10 @@ class ContactController extends Controller
             'projects' => 'array',
         ]);
 
+        if (!empty($validated['birthdate'])) {
+            $validated['birthdate'] = \Carbon\Carbon::parse($validated['birthdate'])->format('Y-m-d');
+        }
+
         DB::beginTransaction();
         try {
             $oldData = $contact->toArray();
@@ -330,6 +334,12 @@ class ContactController extends Controller
                     'message' => 'El correo electrónico ya está asociado a otro contacto.'
                 ], 422);
             }
+        }
+
+        if ($request->filled('birthdate')) {
+            $request->merge([
+                'birthdate' => \Carbon\Carbon::parse($request->input('birthdate'))->format('Y-m-d')
+            ]);
         }
 
         try {

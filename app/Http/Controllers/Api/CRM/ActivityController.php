@@ -75,6 +75,7 @@ class ActivityController extends Controller
             }
         }
 
+        $activity->refresh(); // Refrescar para obtener los datos actualizados
 
         return response()->json([
             'message' => 'Actividad creada exitosamente',

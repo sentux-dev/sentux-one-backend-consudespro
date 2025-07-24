@@ -32,7 +32,6 @@ class Contact extends Model
 
     protected $casts = [
         'active' => 'boolean',
-        'birthdate' => 'date:Y-m-d', // 🔹 Esto obliga a serializar solo la fecha
     ];
 
     /** ============================
@@ -84,5 +83,19 @@ class Contact extends Model
         return $this->belongsToMany(Origin::class, 'crm_origin_crm_contact', 'crm_contact_id', 'crm_origin_id')
             ->withPivot('is_original', 'is_last')
             ->withTimestamps();
+    }
+
+    public function activities()
+    {
+        return $this->hasMany(Activity::class, 'contact_id');
+    }
+
+    // Accessor para última actividad
+    protected $appends = ['last_activity'];
+
+    public function getLastActivityAttribute()
+    {
+        $lastActivity = $this->activities()->latest('created_at')->first();
+        return $lastActivity ? $lastActivity->created_at : null;
     }
 }
