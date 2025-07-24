@@ -76,7 +76,44 @@ class ContactController extends Controller
             $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
         }
 
-        $query->latest('created_at');
+        $sortField = $request->get('sort_field', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+
+        // Si el campo es full_name, ordenamos por first_name y last_name
+        if ($sortField === 'full_name') {
+            $query->orderBy('first_name', $sortOrder)
+                ->orderBy('last_name', $sortOrder);
+        } else if ($sortField === 'status_name') {
+            $query->join('crm_contact_statuses', 'crm_contacts.contact_status_id', '=', 'crm_contact_statuses.id')
+                ->orderBy('crm_contact_statuses.name', $sortOrder);
+        } else if ($sortField === 'owner_name') {
+            $query->join('users as owners', 'crm_contacts.owner_id', '=', 'owners.id')
+                ->orderBy('owners.first_name', $sortOrder)
+                ->orderBy('owners.last_name', $sortOrder);
+        } else if ($sortField === 'deals_names') {
+            $query->leftJoin('crm_contact_crm_deal', 'crm_contacts.id', '=', 'crm_contact_crm_deal.crm_contact_id')
+                ->leftJoin('crm_deals', 'crm_contact_crm_deal.crm_deal_id', '=', 'crm_deals.id')
+                ->select('crm_contacts.*')
+                ->orderBy('crm_deals.name', $sortOrder);
+        } else if ($sortField === 'campaigns_names') {
+            $query->leftJoin('crm_campaign_crm_contact', 'crm_contacts.id', '=', 'crm_campaign_crm_contact.crm_contact_id')
+                ->leftJoin('crm_campaigns', 'crm_campaign_crm_contact.crm_campaign_id', '=', 'crm_campaigns.id')
+                ->select('crm_contacts.*')
+                ->orderBy('crm_campaigns.name', $sortOrder);
+        } else if ($sortField === 'origins_names') {
+            $query->leftJoin('crm_origin_crm_contact', 'crm_contacts.id', '=', 'crm_origin_crm_contact.crm_contact_id')
+                ->leftJoin('crm_origins', 'crm_origin_crm_contact.crm_origin_id', '=', 'crm_origins.id')
+                ->select('crm_contacts.*')
+                ->orderBy('crm_origins.name', $sortOrder);
+        } else if ($sortField === 'projects_names') {
+            $query->leftJoin('crm_contact_real_state_project', 'crm_contacts.id', '=', 'crm_contact_real_state_project.crm_contact_id')
+                ->leftJoin('real_state_projects', 'crm_contact_real_state_project.real_state_project_id', '=', 'real_state_projects.id')
+                ->select('crm_contacts.*')
+                ->orderBy('real_state_projects.name', $sortOrder);
+        } else {
+            $query->orderBy($sortField, $sortOrder);
+        }
+
 
         $contacts = $query->paginate($request->get('per_page', 10));
 
