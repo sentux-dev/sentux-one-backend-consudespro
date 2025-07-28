@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CRM\ActivityController;
 use App\Http\Controllers\Api\CRM\ContactAdvancedInfoController;
+use App\Http\Controllers\Api\CRM\ContactAssociationController;
 use App\Http\Controllers\Api\User\Profile\MfaController;
 use App\Http\Controllers\Api\User\Profile\PersonalDataController;
 use App\Http\Controllers\Api\User\Profile\PreferencesController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\CRM\ContactController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\ContactLookupController;
+use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 
 Route::get('/user', function (Request $request) {
@@ -102,6 +104,25 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/custom-fields', [ContactCustomFieldController::class, 'store']);
         Route::put('/custom-fields/{field}', [ContactCustomFieldController::class, 'update']);
         Route::post('/custom-fields/{field}/desactivate', [ContactCustomFieldController::class, 'desactivate']);
+
+        Route::prefix('contacts/{contact}/associations')->group(function () {
+            Route::get('/', [ContactAssociationController::class, 'index']);
+            Route::post('/', [ContactAssociationController::class, 'store']);
+            Route::delete('{id}', [ContactAssociationController::class, 'destroy']);
+        });
+
+        Route::prefix('settings/pipelines')->middleware('auth:sanctum')->group(function () {
+            Route::get('/', [PipelineController::class, 'index']);
+            Route::post('/', [PipelineController::class, 'store']);
+            Route::put('{pipeline}', [PipelineController::class, 'update']);
+            Route::delete('{pipeline}', [PipelineController::class, 'destroy']);
+
+            Route::post('{pipeline}/stages', [PipelineController::class, 'addStage']);
+            Route::put('stages/{stage}', [PipelineController::class, 'updateStage']);
+            Route::delete('stages/{stage}', [PipelineController::class, 'deleteStage']);
+
+            Route::post('{pipeline}/reorder-stages', [PipelineController::class, 'reorderStages']);
+        });
 
     });
 

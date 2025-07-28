@@ -104,4 +104,19 @@ class Contact extends Model
         return $this->hasMany(ContactCustomFieldValue::class, 'contact_id')
             ->with('field');
     }
+
+    public function associations()
+    {
+        return $this->hasMany(ContactAssociation::class, 'contact_id');
+    }
+
+    public function associatedContacts()
+    {
+        return $this->belongsToMany(
+            Contact::class,
+            'crm_contact_associations',
+            'contact_id',
+            'associated_contact_id'
+        )->withPivot('relation_type')->withTimestamps();
+    }
 }

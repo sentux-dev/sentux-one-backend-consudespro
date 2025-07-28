@@ -469,6 +469,17 @@ class ContactController extends Controller
     }
 
     /**
+     * Eliminar una asociación de contacto.
+     */
+    public function deleteAssociation(Contact $contact, $id)
+    {
+        $association = $contact->associations()->where('id', $id)->firstOrFail();
+        $association->delete();
+
+        return response()->json(['message' => 'Asociación eliminada correctamente.']);
+    }
+
+    /**
      * Registrar un log genérico.
      */
     private function logAction(string $action, string $entityType, ?int $entityId, $changes = null)
