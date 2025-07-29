@@ -2,62 +2,67 @@
 
 namespace App\Models\Crm;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany; // Cambiado de MorphMany
 
 class Deal extends Model
 {
+    use HasFactory;
+
     protected $table = 'crm_deals';
 
     protected $fillable = [
         'name',
         'amount',
+        'close_date',
         'pipeline_id',
         'stage_id',
         'owner_id',
     ];
 
-    /**
-     * Relaciones
-     */
+    protected $casts = [
+        'close_date' => 'date',
+        'amount' => 'decimal:2',
+    ];
 
-    public function owner()
-    {
-        return $this->belongsTo(User::class, 'owner_id');
-    }
-
-    public function pipeline()
+    public function pipeline(): BelongsTo
     {
         return $this->belongsTo(Pipeline::class, 'pipeline_id');
     }
 
-    public function stage()
+    public function stage(): BelongsTo
     {
         return $this->belongsTo(PipelineStage::class, 'stage_id');
     }
 
-    public function customFieldValues()
+    public function owner(): BelongsTo
     {
-        return $this->hasMany(DealCustomFieldValue::class, 'deal_id')->with('field');
+        return $this->belongsTo(Contact::class, 'owner_id'); // Asumiendo que el dueño es un Contact
     }
 
-    public function associations()
+    public function customFieldValues(): HasMany
+    {
+        return $this->hasMany(DealCustomFieldValue::class, 'deal_id');
+    }
+
+    // CORRECCIÓN: Relación de un Deal con sus asociaciones (HasMany)
+    // Un Deal tiene muchas DealAssociations, donde 'deal_id' es la clave foránea en DealAssociation.
+    public function dealAssociations(): HasMany
     {
         return $this->hasMany(DealAssociation::class, 'deal_id');
     }
 
-    public function contacts(): MorphToMany
+    // Método para asociar un contacto (u otro tipo) a este negocio
+    public function associate(Model $model, ?string $relationType = null): DealAssociation
     {
-        return $this->morphedByMany(Contact::class, 'associable', 'crm_deal_associations')
-                    ->withPivot('relation_type')
-                    ->withTimestamps();
-    }
-
-    public function companies(): MorphToMany
-    {
-        return $this->morphedByMany(Company::class, 'associable', 'crm_deal_associations')
-                    ->withPivot('relation_type')
-                    ->withTimestamps();
+        // Al llamar a create() en una relación HasMany, Eloquent automáticamente
+        // establece la clave foránea ('deal_id' en este caso) al ID del modelo padre ($this->id).
+        return $this->dealAssociations()->create([ // Usar la nueva relación HasMany
+            'associable_id' => $model->id,
+            'associable_type' => $model::class, // Usar $model::class para el nombre de clase completo
+            'relation_type' => $relationType,
+        ]);
     }
 }

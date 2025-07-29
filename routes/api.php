@@ -26,8 +26,6 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-
-
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/auth/verify-email-login', [AuthController::class, 'verifyEmailLoginCode']);
@@ -36,7 +34,6 @@ Route::post('/auth/verify-app-login', [AuthController::class, 'verifyAppLoginCod
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
-
 
     // User routes
     Route::prefix('user')->group(function () {
@@ -52,7 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
             // Seguridad
             Route::get('security-data', [SecurityDataController::class, 'show']);
             Route::put('security-data', [SecurityDataController::class, 'update']);
-             Route::put('security-data/password', [SecurityDataController::class, 'updatePassword']);
+            Route::put('security-data/password', [SecurityDataController::class, 'updatePassword']);
 
             //  MFA
             Route::prefix('mfa')->group(function () {
@@ -112,16 +109,21 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', [ContactAssociationController::class, 'index']);
             Route::post('/', [ContactAssociationController::class, 'store']);
             Route::delete('{id}', [ContactAssociationController::class, 'destroy']);
+            // Nota: Para la eliminación de asociaciones polimórficas (como Deal a Contact),
+            // la ruta DELETE puede necesitar ajustarse si el `id` no es el `association_id` de la tabla pivot.
+            // Considera enviar `deal_id` y `contact_id` en el cuerpo de la solicitud DELETE
+            // o crear una ruta específica para la eliminación de DealAssociation.
         });
 
         Route::get('/deals', [DealController::class, 'index']);
-        Route::post('/deals', [DealController::class, 'store']);
+        Route::post('/deals', [DealController::class, 'store']); // Ya maneja la asociación con contacto
         Route::put('/deals/{deal}', [DealController::class, 'update']);
         Route::get('/deals/custom-fields', [DealCustomFieldController::class, 'index']);
+        Route::get('/deals/{deal}', [DealController::class, 'show']);
         Route::get('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'index']);
         Route::post('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'storeOrUpdate']);
 
-        Route::prefix('settings/pipelines')->middleware('auth:sanctum')->group(function () {
+        Route::prefix('settings/pipelines')->group(function () {
             Route::get('/', [PipelineController::class, 'index']);
             Route::post('/', [PipelineController::class, 'store']);
             Route::put('{pipeline}', [PipelineController::class, 'update']);
@@ -144,6 +146,4 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/status', [ContactLookupController::class, 'status']);
         Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
     });
-
-
 });

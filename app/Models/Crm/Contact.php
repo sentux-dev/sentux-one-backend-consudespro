@@ -5,6 +5,7 @@ namespace App\Models\Crm;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Contact extends Model
 {
@@ -118,5 +119,10 @@ class Contact extends Model
             'contact_id',
             'associated_contact_id'
         )->withPivot('relation_type')->withTimestamps();
+    }
+
+    public function dealAssociations(): MorphMany
+    {
+        return $this->morphMany(DealAssociation::class, 'associable');
     }
 }
