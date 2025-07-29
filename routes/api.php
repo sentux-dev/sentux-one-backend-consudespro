@@ -16,6 +16,9 @@ use App\Http\Controllers\Api\CRM\ContactController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\ContactLookupController;
+use App\Http\Controllers\Api\CRM\DealController;
+use App\Http\Controllers\Api\CRM\DealCustomFieldController;
+use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 
@@ -110,6 +113,13 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/', [ContactAssociationController::class, 'store']);
             Route::delete('{id}', [ContactAssociationController::class, 'destroy']);
         });
+
+        Route::get('/deals', [DealController::class, 'index']);
+        Route::post('/deals', [DealController::class, 'store']);
+        Route::put('/deals/{deal}', [DealController::class, 'update']);
+        Route::get('/deals/custom-fields', [DealCustomFieldController::class, 'index']);
+        Route::get('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'index']);
+        Route::post('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'storeOrUpdate']);
 
         Route::prefix('settings/pipelines')->middleware('auth:sanctum')->group(function () {
             Route::get('/', [PipelineController::class, 'index']);
