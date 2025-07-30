@@ -21,6 +21,12 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
+use App\Http\Controllers\Api\RealState\DocumentController;
+use App\Http\Controllers\Api\RealState\ExtraController;
+use App\Http\Controllers\Api\RealState\HouseModelController;
+use App\Http\Controllers\Api\RealState\LotAdjustmentController;
+use App\Http\Controllers\Api\RealState\LotController;
+use App\Http\Controllers\Api\RealState\ProjectController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -136,14 +142,47 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('{pipeline}/reorder-stages', [PipelineController::class, 'reorderStages']);
         });
 
-    });
+        Route::prefix('lookups')->group(function () {
+            Route::get('/projects', [ContactLookupController::class, 'projects']);
+            Route::get('/campaigns', [ContactLookupController::class, 'campaigns']);
+            Route::get('/origins', [ContactLookupController::class, 'origins']);
+            Route::get('/owners', [ContactLookupController::class, 'owners']);
+            Route::get('/status', [ContactLookupController::class, 'status']);
+            Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
+        });
 
-    Route::prefix('crm/lookups')->group(function () {
-        Route::get('/projects', [ContactLookupController::class, 'projects']);
-        Route::get('/campaigns', [ContactLookupController::class, 'campaigns']);
-        Route::get('/origins', [ContactLookupController::class, 'origins']);
-        Route::get('/owners', [ContactLookupController::class, 'owners']);
-        Route::get('/status', [ContactLookupController::class, 'status']);
-        Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
+    });
+    // Proyectos Inmobiliarios
+    Route::prefix('real-estate')->group(function () {
+        
+        // Proyectos
+        Route::apiResource('projects', ProjectController::class);
+
+        // Modelos de Casa (anidados bajo proyecto)
+        Route::apiResource('projects.house-models', HouseModelController::class)->only(['index', 'store']);
+        Route::apiResource('house-models', HouseModelController::class)->except(['index', 'store']);
+        
+        // Extras (anidados bajo proyecto)
+        Route::apiResource('projects.extras', ExtraController::class)->only(['index', 'store']);
+        Route::apiResource('extras', ExtraController::class)->except(['index', 'store']);
+
+        // Lotes (rutas individuales)
+        Route::get('lots/{lot:slug}', [LotController::class, 'show'])->name('lots.show');
+        Route::put('lots/{lot:slug}', [LotController::class, 'update'])->name('lots.update');
+
+        // Ajustes de Lote (anidados bajo lote)
+        // POST /api/real-estate/lots/{lot:slug}/adjustments
+        Route::post('lots/{lot:slug}/adjustments', [LotAdjustmentController::class, 'store'])->name('lots.adjustments.store');
+        // DELETE /api/real-estate/lot-adjustments/{adjustment}
+        Route::delete('lot-adjustments/{adjustment}', [LotAdjustmentController::class, 'destroy'])->name('lots.adjustments.destroy');
+
+        // Documentos de Lote (anidados bajo lote)
+        // GET /api/real-estate/lots/{lot:slug}/documents
+        // POST /api/real-estate/lots/{lot:slug}/documents
+        Route::post('lots/{lot:slug}/documents', [DocumentController::class, 'store'])->name('lots.documents.store');
+        Route::get('lots/{lot:slug}/documents', [DocumentController::class, 'index'])->name('lots.documents.index');
+        // DELETE /api/real-estate/documents/{document}
+        Route::delete('documents/{document}', [DocumentController::class, 'destroy'])->name('lots.documents.destroy');
+
     });
 });
