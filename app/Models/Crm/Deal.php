@@ -27,6 +27,8 @@ class Deal extends Model
         'amount' => 'decimal:2',
     ];
 
+    protected $appends = ['contact'];
+
     public function pipeline(): BelongsTo
     {
         return $this->belongsTo(Pipeline::class, 'pipeline_id');
@@ -64,5 +66,23 @@ class Deal extends Model
             'associable_type' => $model::class, // Usar $model::class para el nombre de clase completo
             'relation_type' => $relationType,
         ]);
+    }
+
+    public function getContactAttribute()
+    {
+        // Revisa si la relación dealAssociations ya está cargada
+        if (! $this->relationLoaded('dealAssociations')) {
+            // Si no está cargada, no podemos obtener el contacto, devolvemos null
+            // El controller se encargará de cargarla con with()
+            return null;
+        }
+
+        // Busca la primera asociación que sea de tipo Contacto
+        $contactAssociation = $this->dealAssociations
+            ->where('associable_type', Contact::class)
+            ->first();
+
+        // Si la encuentra, devuelve el modelo asociado (el contacto en sí)
+        return $contactAssociation ? $contactAssociation->associable : null;
     }
 }
