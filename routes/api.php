@@ -21,6 +21,10 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
+use App\Http\Controllers\Api\Marketing\CampaignController;
+use App\Http\Controllers\Api\Marketing\MailingListController;
+use App\Http\Controllers\Api\Marketing\SegmentController;
+use App\Http\Controllers\Api\Marketing\WebhookController;
 use App\Http\Controllers\Api\RealState\DocumentController;
 use App\Http\Controllers\Api\RealState\ExtraController;
 use App\Http\Controllers\Api\RealState\HouseModelController;
@@ -185,4 +189,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('documents/{document}', [DocumentController::class, 'destroy'])->name('lots.documents.destroy');
 
     });
+
+    Route::prefix('marketing')->name('marketing.')->group(function () {
+        
+        // Rutas para gestionar campañas
+        Route::apiResource('campaigns', CampaignController::class);
+        // Ruta específica para enviar una campaña
+        Route::post('campaigns/{campaign:slug}/send', [CampaignController::class, 'send'])->name('campaigns.send');
+        // Ruta para enviar una prueba
+        Route::post('campaigns/{campaign:slug}/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.send-test');
+
+        // Rutas para gestionar listas de correo
+        Route::apiResource('mailing-lists', MailingListController::class);
+        
+        // Rutas para gestionar segmentos
+        Route::apiResource('segments', SegmentController::class);
+        // Ruta para previsualizar los contactos de un segmento
+        Route::post('segments/preview', [SegmentController::class, 'preview'])->name('segments.preview');
+        // Ruta para exportar contactos de un segmento a CSV
+        Route::get('campaigns/{campaign:slug}/export-csv', [CampaignController::class, 'exportCsv'])->name('campaigns.export');
+
+    });
 });
+
+// Ruta pública para el Webhook (fuera del middleware de autenticación)
+Route::post('webhooks/email-events', [WebhookController::class, 'handleMandrill'])->name('webhooks.mandrill');

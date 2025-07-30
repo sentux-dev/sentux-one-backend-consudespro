@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'mandrill' => [
+        'secret' => env('MANDRILL_SECRET'),
+        'webhook_key' => env('MANDRILL_WEBHOOK_KEY'),
+    ],
+    
+    // Indica a nuestro Manager cuál es el proveedor por defecto
+    'default_email_provider' => env('DEFAULT_EMAIL_PROVIDER', 'mandrill'),
+    'mail_batch_size' => env('MAIL_BATCH_SIZE', 100),
+
 ];
