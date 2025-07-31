@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\Crm\LeadActionController;
 use App\Http\Controllers\Api\Crm\LeadController;
 use App\Http\Controllers\Api\Crm\LeadImportController;
+use App\Http\Controllers\Api\Crm\LeadProcessingLogController;
 use App\Http\Controllers\Api\Crm\LeadSourceController;
 use App\Http\Controllers\Api\Crm\LeadWebhookController;
 use App\Http\Controllers\Api\CRM\PipelineController;
@@ -169,6 +170,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/leads/import', [LeadImportController::class, 'store'])->name('leads.import');
         Route::post('/leads/import/analyze', [LeadImportController::class, 'analyze'])->name('leads.import.analyze');
         Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
+        Route::get('/lead-logs', [LeadProcessingLogController::class, 'index'])->name('leads.logs.index');
+
 
         Route::apiResource('workflows', WorkflowController::class);
         Route::apiResource('lead-sources', LeadSourceController::class);
