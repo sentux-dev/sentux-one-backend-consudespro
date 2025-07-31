@@ -10,7 +10,7 @@ class WorkflowCondition extends Model
 {
     use HasFactory;
     protected $table = 'crm_workflow_conditions';
-    protected $fillable = ['workflow_id', 'field', 'operator', 'value', 'group', 'type'];
+    protected $fillable = ['workflow_id', 'field', 'operator', 'value', 'group_identifier', 'group_logic'];
 
     public function workflow(): BelongsTo
     {

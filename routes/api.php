@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\RealState\HouseModelController;
 use App\Http\Controllers\Api\RealState\LotAdjustmentController;
 use App\Http\Controllers\Api\RealState\LotController;
 use App\Http\Controllers\Api\RealState\ProjectController;
+use App\Http\Controllers\Api\User\UserGroupController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -86,6 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/users/{user}', [UserController::class, 'update']);
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
+
+    Route::apiResource('user-groups', UserGroupController::class);
 
     // Rutas de CRM
     Route::get('/contacts', [ContactController::class, 'index']);
