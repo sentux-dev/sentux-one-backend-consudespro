@@ -16,6 +16,7 @@ use App\Models\UserGroup;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache; // Importar Cache
+use App\Models\AssignmentCounter;
 
 class ProcessLeadJob implements ShouldQueue
 {
@@ -87,7 +88,6 @@ class ProcessLeadJob implements ShouldQueue
                 'last_name' => data_get($payload, 'last_name', '#' . $this->lead->id),
                 'phone' => data_get($payload, 'phone'),
                 'contact_status_id' => $params['status_id'] ?? 1,
-                'owner_id' => 1, // Propietario inicial por defecto (Admin)
             ]
         );
         $this->logAction('ACTION_EXECUTED', "Contacto creado/encontrado con ID: {$this->contact->id}");
@@ -96,26 +96,37 @@ class ProcessLeadJob implements ShouldQueue
     private function assignOwnerAction(array $params): void
     {
         if (!$this->contact) {
-            $this->logAction('ACTION_SKIPPED', "Se omitió 'assign_owner' porque no se ha creado un contacto.");
+            $this->logAction('ACTION_SKIPPED', "Se omitió 'assign_owner' porque no hay un contacto asociado.");
             return;
         }
 
         $assigneeId = null;
-        $assignmentType = $params['assignment_type'] ?? 'user'; // 'user' o 'group'
+        $assignmentType = $params['assignment_type'] ?? 'user';
         
         if ($assignmentType === 'user') {
             $assigneeId = $params['user_id'] ?? null;
-        } else { // group
+        } else { // Asignación por Grupo
             $groupId = $params['group_id'] ?? null;
             $group = UserGroup::with('users')->find($groupId);
             
             if ($group && $group->users->isNotEmpty()) {
-                $cacheKey = 'last_assigned_user_index_for_group_' . $groupId;
-                $lastIndex = Cache::get($cacheKey, -1);
-                $nextIndex = ($lastIndex + 1) % $group->users->count();
-                
-                $assigneeId = $group->users[$nextIndex]->id;
-                Cache::put($cacheKey, $nextIndex, now()->addDay()); // Guardar el índice por un día
+                $scope = $params['assignment_scope'] ?? 'group'; // 'group' o 'workflow'
+                $countable = ($scope === 'group') ? $group : $this->lead->workflow; // El modelo al que se asocia el contador
+
+                // Usamos una transacción para evitar condiciones de carrera
+                DB::transaction(function () use ($countable, $group, &$assigneeId) {
+                    $counter = AssignmentCounter::firstOrCreate([
+                        'countable_id' => $countable->id,
+                        'countable_type' => get_class($countable),
+                    ]);
+
+                    $nextIndex = ($counter->last_assigned_user_index + 1) % $group->users->count();
+                    $assignee = $group->users[$nextIndex];
+                    $assigneeId = $assignee->id;
+
+                    // Actualizar el contador para la próxima vez
+                    $counter->update(['last_assigned_user_index' => $nextIndex]);
+                });
             }
         }
 
@@ -123,6 +134,8 @@ class ProcessLeadJob implements ShouldQueue
             $this->contact->owner_id = $assigneeId;
             $this->contact->save();
             $this->logAction('ACTION_EXECUTED', "Se asignó el propietario ID: {$assigneeId} al contacto.");
+        } else {
+             $this->logAction('ACTION_SKIPPED', "No se pudo asignar propietario, no se encontró un usuario válido.");
         }
     }
     
