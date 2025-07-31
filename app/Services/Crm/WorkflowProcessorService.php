@@ -4,6 +4,7 @@ namespace App\Services\Crm;
 
 use App\Models\Crm\ExternalLead;
 use App\Models\Crm\Workflow;
+use Illuminate\Support\Facades\Log;
 
 class WorkflowProcessorService
 {
@@ -17,7 +18,6 @@ class WorkflowProcessorService
     {
         // Obtener todos los workflows activos, ordenados por prioridad
         $workflows = Workflow::where('is_active', true)->orderBy('priority')->get();
-
         foreach ($workflows as $workflow) {
             if ($this->checkConditions($lead, $workflow)) {
                 return $workflow; // Devuelve el primer workflow que coincida
@@ -59,6 +59,7 @@ class WorkflowProcessorService
      */
     private function evaluate($actualValue, string $operator, string $expectedValue): bool
     {
+        Log::info("Evaluando: {$actualValue} {$operator} {$expectedValue}");
         switch ($operator) {
             case 'equals':
                 return $actualValue == $expectedValue;
@@ -70,6 +71,7 @@ class WorkflowProcessorService
                 return is_string($actualValue) && str_starts_with(strtolower($actualValue), strtolower($expectedValue));
             // Puedes añadir más operadores aquí: 'greater_than', 'less_than', etc.
             default:
+                Log::warning("Operador no reconocido: {$operator}");
                 return false;
         }
     }

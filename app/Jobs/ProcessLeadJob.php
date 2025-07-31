@@ -21,8 +21,11 @@ class ProcessLeadJob implements ShouldQueue
 
     public function handle(WorkflowProcessorService $processor): void
     {
+        Log::info("Procesando lead {$this->lead->id} desde la fuente {$this->lead->source}");
+
         // 1. Encontrar un workflow que coincida
         $workflow = $processor->findMatchingWorkflow($this->lead);
+        Log::info("Workflow encontrado: " . ($workflow ? $workflow->name : 'Ninguno'));
 
         if (!$workflow) {
             $this->logAction('NO_WORKFLOW_MATCH', 'No se encontró un workflow aplicable.');

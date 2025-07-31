@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\Crm\LeadActionController;
 use App\Http\Controllers\Api\Crm\LeadController;
 use App\Http\Controllers\Api\Crm\LeadImportController;
+use App\Http\Controllers\Api\Crm\LeadSourceController;
 use App\Http\Controllers\Api\Crm\LeadWebhookController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
@@ -167,6 +168,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
 
         Route::apiResource('workflows', WorkflowController::class);
+        Route::apiResource('lead-sources', LeadSourceController::class);
     });
     // Proyectos Inmobiliarios
     Route::prefix('real-estate')->group(function () {
@@ -226,4 +228,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Ruta pública para el Webhook (fuera del middleware de autenticación)
 Route::post('webhooks/email-events', [WebhookController::class, 'handleMandrill'])->name('webhooks.mandrill');
-Route::post('/leads/ingress/{source}', [LeadWebhookController::class, 'ingress'])->name('leads.ingress');
+
+Route::post('/leads/ingress/{source}', [LeadWebhookController::class, 'ingress'])
+    ->name('leads.ingress')
+    ->middleware('webhook.validate');
