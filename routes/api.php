@@ -19,8 +19,13 @@ use App\Http\Controllers\Api\CRM\ContactLookupController;
 use App\Http\Controllers\Api\CRM\DealController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
+use App\Http\Controllers\Api\Crm\LeadActionController;
+use App\Http\Controllers\Api\Crm\LeadController;
+use App\Http\Controllers\Api\Crm\LeadImportController;
+use App\Http\Controllers\Api\Crm\LeadWebhookController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
+use App\Http\Controllers\Api\Crm\WorkflowController;
 use App\Http\Controllers\Api\Marketing\CampaignController;
 use App\Http\Controllers\Api\Marketing\MailingListController;
 use App\Http\Controllers\Api\Marketing\SegmentController;
@@ -155,6 +160,13 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
         });
 
+        Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
+        Route::post('/leads/{externalLead}/execute-action', [LeadActionController::class, 'executeAction'])->name('leads.executeAction');
+        Route::post('/leads/import', [LeadImportController::class, 'store'])->name('leads.import');
+        Route::post('/leads/import/analyze', [LeadImportController::class, 'analyze'])->name('leads.import.analyze');
+        Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
+
+        Route::apiResource('workflows', WorkflowController::class);
     });
     // Proyectos Inmobiliarios
     Route::prefix('real-estate')->group(function () {
@@ -214,3 +226,4 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Ruta pública para el Webhook (fuera del middleware de autenticación)
 Route::post('webhooks/email-events', [WebhookController::class, 'handleMandrill'])->name('webhooks.mandrill');
+Route::post('/leads/ingress/{source}', [LeadWebhookController::class, 'ingress'])->name('leads.ingress');
