@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Marketing;
 use App\Http\Controllers\Controller;
 use App\Models\Marketing\Segment;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class SegmentController extends Controller
 {
@@ -50,5 +51,26 @@ class SegmentController extends Controller
         $segment = Segment::create($validated);
         
         return response()->json($segment, 201);
+    }
+
+    public function update(Request $request, Segment $segment)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('marketing_segments')->ignore($segment->id)],
+            'description' => 'nullable|string',
+            'filters' => 'required|array'
+        ]);
+
+        $segment->update($validated);
+        return response()->json($segment);
+    }
+
+    /**
+     * Elimina un segmento.
+     */
+    public function destroy(Segment $segment)
+    {
+        $segment->delete();
+        return response()->json(['message' => 'Segmento eliminado.']);
     }
 }
