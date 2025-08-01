@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Crm\LeadWebhookController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 use App\Http\Controllers\Api\Crm\WorkflowController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\Marketing\CampaignController;
 use App\Http\Controllers\Api\Marketing\MailingListController;
 use App\Http\Controllers\Api\Marketing\SegmentController;
@@ -102,6 +103,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/contacts/{contact}/reactivate', [ContactController::class, 'reactivate']);
     Route::get('/contacts/{contact}/advanced-info', [ContactAdvancedInfoController::class, 'show']);
     Route::patch('/contacts/{contact}/advanced-info', [ContactAdvancedInfoController::class, 'update']);
+        // Dashboard
+        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 
     Route::prefix('crm')->group(function () {
         // Contactos

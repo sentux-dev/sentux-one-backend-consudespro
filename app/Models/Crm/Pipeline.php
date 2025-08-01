@@ -14,4 +14,9 @@ class Pipeline extends Model
     {
         return $this->hasMany(PipelineStage::class, 'pipeline_id')->orderBy('order');
     }
+
+    public function deals()
+    {
+        return $this->hasMany(Deal::class, 'pipeline_id');
+    }
 }
