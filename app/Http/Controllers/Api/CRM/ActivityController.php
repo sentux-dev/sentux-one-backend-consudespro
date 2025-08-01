@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
-use App\Models\CRM\Activity;
-use App\Models\CRM\Task;
+use App\Models\Crm\Activity;
+use App\Models\Crm\Task;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;

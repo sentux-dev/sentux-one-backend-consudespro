@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 // Importar los modelos necesarios
-use App\Models\CRM\Task;
+use App\Models\Crm\Task;
 use App\Models\Crm\Deal;
 use App\Models\Crm\Contact;
 use App\Models\Crm\ExternalLead;
