@@ -55,6 +55,11 @@ class WorkflowProcessorService
 
         foreach ($group as $condition) {
             $payloadValue = data_get($lead->payload, $condition->field);
+
+            if (is_null($payloadValue)) {
+                $payloadValue = data_get($lead->payload, '_original_row.' . $condition->field);
+            }
+
             $evaluationResult = $this->evaluate($payloadValue, $condition->operator, $condition->value);
 
             // Lógica AND: la primera que falle hace que el grupo falle.
@@ -84,7 +89,6 @@ class WorkflowProcessorService
      */
     private function evaluate($actualValue, string $operator, string $expectedValue): bool
     {
-        Log::info("Evaluando: {$actualValue} {$operator} {$expectedValue}");
         switch ($operator) {
             case 'equals':
                 return $actualValue == $expectedValue;
