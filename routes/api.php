@@ -170,6 +170,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
         Route::post('/leads/{externalLead}/execute-action', [LeadActionController::class, 'executeAction'])->name('leads.executeAction');
+        Route::post('/leads/bulk-action', [LeadActionController::class, 'bulkExecuteAction'])->name('leads.bulkAction');
         Route::post('/leads/import', [LeadImportController::class, 'store'])->name('leads.import');
         Route::post('/leads/import/analyze', [LeadImportController::class, 'analyze'])->name('leads.import.analyze');
         Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
