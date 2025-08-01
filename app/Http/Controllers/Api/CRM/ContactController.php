@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Crm\ContactCollection;
-use App\Http\Resources\Crm\ContactResource;
+use App\Http\Resources\CRM\ContactCollection;
+use App\Http\Resources\CRM\ContactResource;
 use Illuminate\Http\Request;
 use App\Models\Crm\Contact;
 use App\Models\Crm\Campaign;
