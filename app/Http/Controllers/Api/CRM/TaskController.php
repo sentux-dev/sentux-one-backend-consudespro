@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\CRM\Task;
+use App\Models\Crm\Task;
 use Illuminate\Support\Facades\Auth;
 
 class TaskController extends Controller

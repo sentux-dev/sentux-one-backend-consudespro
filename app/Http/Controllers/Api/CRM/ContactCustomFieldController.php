@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
-use App\Models\CRM\ContactCustomField;
+use App\Models\Crm\ContactCustomField;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
