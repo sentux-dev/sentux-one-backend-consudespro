@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\Crm\ExternalLead;
 use App\Services\Crm\WorkflowProcessorService;
 use App\Models\Crm\Contact;
+use App\Models\Crm\ContactCustomField;
 use App\Models\Crm\Task; // Importar Task
 use App\Models\User;
 use App\Models\UserGroup;
@@ -90,7 +91,30 @@ class ProcessLeadJob implements ShouldQueue
                 'contact_status_id' => $params['status_id'] ?? 1,
             ]
         );
+        $this->saveCustomFields($this->lead->payload);
+        
         $this->logAction('ACTION_EXECUTED', "Contacto creado/encontrado con ID: {$this->contact->id}");
+    }
+
+    private function saveCustomFields(array $payload): void
+    {
+        if (!$this->contact || empty($payload['_custom_fields'])) {
+            return;
+        }
+
+        foreach ($payload['_custom_fields'] as $fieldName => $value) {
+            $field = ContactCustomField::where('name', $fieldName)->first();
+            if ($field) {
+                $this->contact->customFieldValues()->updateOrCreate(
+                    [
+                        'custom_field_id' => $field->id
+                    ],
+                    [
+                        'value' => $value
+                    ]
+                );
+            }
+        }
     }
 
     private function assignOwnerAction(array $params): void

@@ -21,12 +21,22 @@ class LeadsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithChun
 
     public function model(array $row)
     {
-        // Obtiene el valor del email usando la columna que el usuario mapeó
-        $emailColumn = $this->mapping['email'] ?? null;
-        $email = $emailColumn ? ($row[strtolower($emailColumn)] ?? null) : null;
+        // 🔹 --- LÓGICA DE VALIDACIÓN CORREGIDA --- 🔹
 
-        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return null; // Ignorar fila si no hay un email válido
+        // 1. Obtener los valores de email y teléfono según el mapeo del usuario.
+        $emailColumn = $this->mapping['email'] ?? null;
+        $phoneColumn = $this->mapping['phone'] ?? null;
+        
+        $email = $emailColumn ? ($row[strtolower(str_replace(' ', '_', $emailColumn))] ?? null) : null;
+        $phone = $phoneColumn ? ($row[strtolower(str_replace(' ', '_', $phoneColumn))] ?? null) : null;
+
+        // 2. Verificar si al menos uno de los dos campos es válido.
+        $hasValidEmail = !empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL);
+        $hasValidPhone = !empty(trim((string)$phone)); // Un simple check para ver si el teléfono no está vacío.
+
+        // 3. Si no hay ni un email válido NI un teléfono, se ignora la fila.
+        if (!$hasValidEmail && !$hasValidPhone) {
+            return null;
         }
         
         $this->leadsCreated++;
@@ -39,16 +49,31 @@ class LeadsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithChun
         ]);
     }
 
+
     // Construye un payload estandarizado usando el mapeo del usuario
     protected function mapRow(array $row): array
     {
         $payload = [];
+        $customFieldsPayload = [];
+        $standardFields = ['email', 'first_name', 'last_name', 'phone'];
+
         foreach ($this->mapping as $systemField => $userColumn) {
-            if (isset($row[strtolower($userColumn)])) {
-                $payload[$systemField] = $row[strtolower($userColumn)];
+            $cleanedColumn = strtolower(str_replace(' ', '_', $userColumn));
+            if (isset($row[$cleanedColumn])) {
+                $value = $row[$cleanedColumn];
+                
+                if (in_array($systemField, $standardFields)) {
+                    // Es un campo estándar
+                    $payload[$systemField] = $value;
+                } else {
+                    // Es un campo personalizado (ej: 'custom_field_1')
+                    $customFieldsPayload[$systemField] = $value;
+                }
             }
         }
-        // También guardamos la fila original por si acaso
+        
+        // Guardamos los campos personalizados en una clave especial dentro del payload
+        $payload['_custom_fields'] = $customFieldsPayload;
         $payload['_original_row'] = $row;
         return $payload;
     }

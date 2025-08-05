@@ -2,10 +2,13 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessLeadImportJob;
 use App\Imports\LeadsImport;
+use App\Models\CRM\ContactCustomField;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
+use Illuminate\Support\Facades\Auth;
 
 class LeadImportController extends Controller
 {
@@ -17,16 +20,16 @@ class LeadImportController extends Controller
         $request->validate(['file' => 'required|mimes:csv,xlsx,xls']);
 
         $file = $request->file('file');
-        
-        // Extraer solo los encabezados de la primera fila
         $headings = (new HeadingRowImport)->toArray($file)[0][0] ?? [];
-        
-        // Guardar el archivo temporalmente y devolver su ruta y encabezados
         $path = $file->store('imports');
+
+        // 🔹 Obtenemos los campos personalizados activos para el mapeo
+        $customFields = ContactCustomField::where('active', true)->get(['id', 'name', 'label']);
 
         return response()->json([
             'headings' => $headings,
             'file_path' => $path,
+            'custom_fields' => $customFields, // 🔹 Devolvemos los campos
         ]);
     }
 
@@ -39,16 +42,15 @@ class LeadImportController extends Controller
             'file_path' => 'required|string',
             'mappings' => 'required|array'
         ]);
+        
+        // 🔹 VERIFICA ESTA LÍNEA: Debe llamar a ProcessLeadImportJob::dispatch()
+        ProcessLeadImportJob::dispatch(
+            $validated['file_path'],
+            $validated['mappings'],
+            Auth::id()
+        );
 
-        try {
-            $import = new LeadsImport($validated['mappings']);
-            Excel::import($import, $validated['file_path']);
-            
-            $leadsCreated = $import->getLeadsCreatedCount();
-
-            return response()->json(['message' => "Importación completada. Se crearon {$leadsCreated} leads."]);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Ocurrió un error al procesar el archivo: ' . $e->getMessage()], 500);
-        }
+        // La respuesta al frontend debe ser inmediata
+        return response()->json(['message' => 'Tu importación ha comenzado y se procesará en segundo plano.']);
     }
 }
