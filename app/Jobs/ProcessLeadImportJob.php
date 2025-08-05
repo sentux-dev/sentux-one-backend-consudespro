@@ -3,6 +3,9 @@
 namespace App\Jobs;
 
 use App\Imports\LeadsImport;
+use App\Models\Crm\LeadImport;
+use App\Models\User;
+use App\Notifications\LeadImportCompletedNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -11,6 +14,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Log;
+
 
 class ProcessLeadImportJob implements ShouldQueue
 {
@@ -31,33 +35,53 @@ class ProcessLeadImportJob implements ShouldQueue
     protected string $filePath;
     protected array $mappings;
     protected int $userId;
+    protected int $leadImportId;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(string $filePath, array $mappings, int $userId)
+    public function __construct(string $filePath, array $mappings, int $userId, int $leadImportId)
     {
         $this->filePath = $filePath;
         $this->mappings = $mappings;
         $this->userId = $userId;
+        $this->leadImportId = $leadImportId;
+
     }
 
     /**
      * Execute the job.
      */
-    public function handle(): void
+     public function handle(): void
     {
+        $leadImport = LeadImport::find($this->leadImportId);
+        if (!$leadImport) {
+            Log::error("No se encontró el lote de importación con ID {$this->leadImportId}.");
+            return;
+        }
+
         try {
-            // Importar el archivo usando nuestra clase LeadsImport
-            $import = new LeadsImport($this->mappings);
+            // 🔹 El job ahora es más simple. Solo crea la instancia y ejecuta la importación.
+            $import = new LeadsImport($this->mappings, $leadImport);
             Excel::import($import, $this->filePath);
 
-            // (Opcional) Enviar una notificación al usuario cuando termine.
-            // Por ahora, registramos en el log.
-            Log::info("Importación de leads completada para el usuario {$this->userId}. Se crearon " . $import->getLeadsCreatedCount() . " leads.");
+            // Actualiza el estado final y el conteo de importados
+            $leadImport->update([
+                'status' => 'completed',
+                'imported_count' => $import->getLeadsCreatedCount(),
+            ]);
+            
+            Log::info("Importación de leads completada. Lote ID: {$this->leadImportId}.");
 
+            $user = User::find($this->userId);
+            if ($user) {
+                $user->notify(new LeadImportCompletedNotification($leadImport));
+            }
+
+        } catch (\Throwable $e) {
+            $leadImport->update(['status' => 'failed']);
+            $this->failed($e); // Llama al método failed
         } finally {
-            // Limpiar el archivo temporal después de procesarlo
             Storage::delete($this->filePath);
         }
     }
@@ -68,6 +92,13 @@ class ProcessLeadImportJob implements ShouldQueue
     public function failed(\Throwable $exception): void
     {
         Log::error("Falló la importación de leads para el usuario {$this->userId}: " . $exception->getMessage());
+
+        $leadImport = LeadImport::find($this->leadImportId);
+        $user = User::find($this->userId);
+        if ($user && $leadImport) {
+            $user->notify(new LeadImportCompletedNotification($leadImport, $exception));
+        }
+
         // Limpiar el archivo temporal incluso si falla
         Storage::delete($this->filePath);
     }

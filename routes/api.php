@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
+use App\Http\Controllers\Api\Crm\LeadImportHistoryController;
 use App\Http\Controllers\Api\CRM\LeadProcessingLogController;
 use App\Http\Controllers\Api\CRM\LeadSourceController;
 use App\Http\Controllers\Api\CRM\LeadWebhookController;
@@ -177,9 +178,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
         Route::post('/leads/{externalLead}/execute-action', [LeadActionController::class, 'executeAction'])->name('leads.executeAction');
         Route::post('/leads/bulk-action', [LeadActionController::class, 'bulkExecuteAction'])->name('leads.bulkAction');
+        Route::post('/leads/process-all-pending', [LeadActionController::class, 'processAllPending'])->name('leads.processAll');
         Route::post('/leads/import', [LeadImportController::class, 'store'])->name('leads.import');
         Route::post('/leads/import/analyze', [LeadImportController::class, 'analyze'])->name('leads.import.analyze');
         Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
+        Route::apiResource('lead-imports', LeadImportHistoryController::class)->only(['index', 'destroy']);
         Route::get('/lead-logs', [LeadProcessingLogController::class, 'index'])->name('leads.logs.index');
 
 

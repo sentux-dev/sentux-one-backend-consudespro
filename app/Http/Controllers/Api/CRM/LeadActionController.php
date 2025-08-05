@@ -56,4 +56,29 @@ class LeadActionController extends Controller
         $count = $leads->count();
         return response()->json(['message' => "{$count} leads han sido encolados para su procesamiento."]);
     }
+
+    public function processAllPending(Request $request)
+    {
+        // Obtenemos una consulta de todos los leads pendientes
+        $pendingLeadsQuery = ExternalLead::where('status', 'pendiente');
+        
+        // Contamos cuántos son para el mensaje de respuesta
+        $count = $pendingLeadsQuery->count();
+
+        if ($count === 0) {
+            return response()->json(['message' => 'No hay leads pendientes para procesar.']);
+        }
+
+        // Actualizamos el estado de todos a 'enviando' de una sola vez para feedback inmediato
+        $pendingLeadsQuery->update(['status' => 'procesado']);
+
+        // Volvemos a obtener la consulta (ya que el update la ejecuta) y despachamos los jobs en lotes
+        ExternalLead::where('status', 'procesado')->chunkById(200, function ($leads) {
+            foreach ($leads as $lead) {
+                ProcessLeadJob::dispatch($lead);
+            }
+        });
+
+        return response()->json(['message' => "Se han encolado {$count} leads para su procesamiento."]);
+    }
 }

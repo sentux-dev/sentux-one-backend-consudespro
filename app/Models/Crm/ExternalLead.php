@@ -9,7 +9,7 @@ class ExternalLead extends Model
 {
     use HasFactory;
     protected $table = 'crm_external_leads'; // 🔹 CORREGIDO
-    protected $fillable = ['source', 'payload', 'status', 'received_at', 'processed_at', 'error_message'];
+    protected $fillable = ['lead_import_id', 'source', 'payload', 'status', 'received_at', 'processed_at', 'error_message'];
     protected $casts = [
         'payload' => 'array',
         'received_at' => 'datetime',

@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessLeadImportJob;
 use App\Imports\LeadsImport;
 use App\Models\CRM\ContactCustomField;
+use App\Models\Crm\LeadImport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
@@ -38,19 +39,27 @@ class LeadImportController extends Controller
      */
     public function process(Request $request)
     {
+        // 🔹 Validación actualizada para la nueva estructura de mapeo
         $validated = $request->validate([
             'file_path' => 'required|string',
-            'mappings' => 'required|array'
+            'mappings' => 'required|array',
+            'mappings.*.type' => 'required|in:column,static',
+            'mappings.*.value' => 'nullable|string',
         ]);
-        
-        // 🔹 VERIFICA ESTA LÍNEA: Debe llamar a ProcessLeadImportJob::dispatch()
+
+        $leadImport = LeadImport::create([
+            'user_id' => Auth::id(),
+            'original_file_name' => $request->input('file_name', 'import.xlsx'),
+            'mappings' => $validated['mappings'],
+        ]);
+
         ProcessLeadImportJob::dispatch(
             $validated['file_path'],
             $validated['mappings'],
-            Auth::id()
+            Auth::id(),
+            $leadImport->id
         );
 
-        // La respuesta al frontend debe ser inmediata
         return response()->json(['message' => 'Tu importación ha comenzado y se procesará en segundo plano.']);
     }
 }
