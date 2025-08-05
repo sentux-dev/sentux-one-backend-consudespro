@@ -6,6 +6,7 @@ use App\Services\Email\EmailProviderInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\IntegrationService;
 
 class MandrillService implements EmailProviderInterface
 {
@@ -13,10 +14,11 @@ class MandrillService implements EmailProviderInterface
     protected string $webhookKey;
     protected string $apiUrl = 'https://mandrillapp.com/api/1.0/messages/send.json';
 
-    public function __construct()
+    public function __construct(IntegrationService $integrationService)
     {
-        $this->apiKey = config('services.mandrill.secret');
-        $this->webhookKey = config('services.mandrill.webhook_key');
+        $credentials = $integrationService->getCredentials('mandrill');
+        $this->apiKey = $credentials['secret'] ?? null;
+        $this->webhookKey = $credentials['webhook_key'] ?? null;
     }
 
     public function send(string $recipientEmail, string $subject, string $htmlContent, string $fromEmail, string $fromName, array $metadata = []): ?string

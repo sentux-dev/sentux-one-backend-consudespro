@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\RealState\LotAdjustmentController;
 use App\Http\Controllers\Api\RealState\LotController;
 use App\Http\Controllers\Api\RealState\ProjectController;
 use App\Http\Controllers\Api\User\UserGroupController;
+use App\Http\Controllers\Api\Settings\IntegrationController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -123,10 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/tasks/{task}', [TaskController::class, 'updateTask']);
         Route::delete('/tasks/{task}', [TaskController::class, 'deleteTask']);
         // Custom Fields
-        Route::get('/custom-fields', [ContactCustomFieldController::class, 'index']);
-        Route::post('/custom-fields', [ContactCustomFieldController::class, 'store']);
-        Route::put('/custom-fields/{field}', [ContactCustomFieldController::class, 'update']);
-        Route::post('/custom-fields/{field}/desactivate', [ContactCustomFieldController::class, 'desactivate']);
+        Route::apiResource('custom-fields', ContactCustomFieldController::class);
+
 
         Route::prefix('contacts/{contact}/associations')->group(function () {
             Route::get('/', [ContactAssociationController::class, 'index']);
@@ -141,7 +140,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/deals', [DealController::class, 'index']);
         Route::post('/deals', [DealController::class, 'store']); // Ya maneja la asociación con contacto
         Route::put('/deals/{deal}', [DealController::class, 'update']);
-        Route::get('/deals/custom-fields', [DealCustomFieldController::class, 'index']);
+        Route::apiResource('deals/custom-fields', DealCustomFieldController::class);
         Route::get('/deals/{deal}', [DealController::class, 'show']);
         Route::get('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'index']);
         Route::post('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'storeOrUpdate']);
@@ -233,6 +232,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Ruta para exportar contactos de un segmento a CSV
         Route::get('campaigns/{campaign:slug}/export-csv', [CampaignController::class, 'exportCsv'])->name('campaigns.export');
 
+    });
+
+    Route::prefix('settings')->group(function() {
+    // ... (otras rutas de settings)
+        Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
     });
 });
 

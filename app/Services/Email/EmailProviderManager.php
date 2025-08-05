@@ -20,7 +20,10 @@ class EmailProviderManager extends Manager
      */
     protected function createMandrillDriver(): MandrillService
     {
-        return new MandrillService();
+        // 🔹 --- LÍNEA CORREGIDA --- 🔹
+        // En lugar de "new MandrillService()", le pedimos al contenedor de Laravel
+        // que lo construya por nosotros, para que inyecte sus dependencias.
+        return $this->container->make(MandrillService::class);
     }
 
     /**
