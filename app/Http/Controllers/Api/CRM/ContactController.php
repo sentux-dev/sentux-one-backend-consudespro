@@ -12,19 +12,33 @@ use App\Models\Crm\Origin;
 use App\Models\Crm\Deal;
 use App\Models\RealState\Project;
 use App\Models\Log;
+use App\Policies\ContactPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class ContactController extends Controller
 {
+    use AuthorizesRequests;
     /**
      * Listar contactos con paginación, filtros y relaciones.
      */
     public function index(Request $request)
     {
-        $query = Contact::with([
+
+        // 1. Autorización: ¿Tiene el usuario permiso para ver la lista de contactos?
+        // Esto llamará a ContactPolicy@viewAny. Si devuelve false, se detiene con un error 403.
+        $this->authorize('viewAny', Contact::class);
+
+        $user = Auth::user();
+
+        // 2. Construcción de la Consulta con Permisos Aplicados
+        // Empezamos la consulta y aplicamos inmediatamente nuestro scope de la policy.
+        $query = (new ContactPolicy)->scopeContact(Contact::query(), $user);
+
+        $query = $query->with([
             'status',
             'disqualificationReason',
             'owner',
@@ -231,8 +245,22 @@ class ContactController extends Controller
      */
     public function show(Contact $contact)
     {
-        $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
-        return new ContactResource($contact);
+        $user = Auth::user();
+        // 1. Autorización: ¿Tiene el usuario permiso para ver este contacto?
+        $query = (new ContactPolicy)->scopeContact(Contact::query(), $user);
+        // 3. Cargar relaciones necesarias
+        $query->with([
+            'status',
+            'disqualificationReason',
+            'owner',
+            'deals:id,name',
+            'campaigns:id,name',
+            'origins:id,name',
+            'projects:id,name'
+        ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
+
+        return new ContactResource($query->findOrFail($contact->id));
+
     }
 
     /**

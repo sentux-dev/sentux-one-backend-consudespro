@@ -18,7 +18,9 @@ class UserController extends Controller
         $sortOrder = $request->get('sortOrder', 'asc'); // asc o desc
         $status = $request->get('status'); // active o inactive
 
-        $query = User::select('id', 'first_name', 'last_name', 'name', 'email', 'active', 'last_active_at', 'created_at');
+        $query = User::select('id', 'first_name', 'last_name', 'name', 'email', 'active', 'last_active_at', 'created_at')
+            ->with('roles:id,name') // Cargar roles relacionados
+            ->withCount('roles');
 
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -44,6 +46,8 @@ class UserController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')],
             'active' => ['required', 'boolean'],
+            'role_ids' => 'nullable|array',
+            'role_ids.*' => 'integer|exists:roles,id',
         ]);
 
         $password = $this->generateCustomPassword();
@@ -56,6 +60,10 @@ class UserController extends Controller
             'active' => $validated['active'],
             'password' => Hash::make($password),
         ]);
+
+        if ($request->has('role_ids')) {
+            $user->syncRoles($validated['role_ids'] ?? []);
+        }
 
         return response()->json([
             'message' => 'Usuario creado correctamente',
@@ -82,7 +90,9 @@ class UserController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'active' => ['required', 'boolean'],
-            'password' => ['nullable', 'string', 'min:8']
+            'password' => ['nullable', 'string', 'min:8'],
+            'role_ids' => 'nullable|array',
+            'role_ids.*' => 'integer|exists:roles,id',
         ]);
 
         $validated['first_name'] = trim($validated['first_name']);
@@ -96,6 +106,10 @@ class UserController extends Controller
         }
 
         $user->update($validated);
+
+        if ($request->has('role_ids')) {
+            $user->syncRoles($validated['role_ids'] ?? []);
+        }
 
         return response()->json([
             'message' => 'Usuario actualizado correctamente',

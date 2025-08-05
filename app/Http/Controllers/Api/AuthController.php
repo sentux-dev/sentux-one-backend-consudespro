@@ -87,12 +87,15 @@ class AuthController extends Controller
         $user->last_login_at = now();
         $user->save();
 
+        $permissions = $user->getAllPermissions()->pluck('name');
+
         // formato de respuesta
         $user->makeHidden(['id','phone', 'last_login', 'created_at', 'update_at', 'mfa_enabled', 'updated_at', 'mfa_type', 'mfa_secret']);
 
         return response()->json([
             'token' => $token,
             'user' => $user,
+            'permissions' => $permissions,
         ]);
     }
 
@@ -231,6 +234,16 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        $user = $request->user();
+        // Retorna el usuario autenticado
+       $permissions = $user->getAllPermissions()->pluck('name');
+
+        // formato de respuesta
+        $user->makeHidden(['id','phone', 'last_login', 'created_at', 'update_at', 'mfa_enabled', 'updated_at', 'mfa_type', 'mfa_secret']);
+
+        return response()->json([
+            'user' => $user,
+            'permissions' => $permissions,
+        ]);
     }
 }

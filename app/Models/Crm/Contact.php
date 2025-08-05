@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Builder;
 
 class Contact extends Model
 {
@@ -125,4 +126,48 @@ class Contact extends Model
     {
         return $this->morphMany(DealAssociation::class, 'associable');
     }
+
+    public function scopeApplyPermissions(Builder $query, User $user): Builder
+    {
+        // Si el usuario es admin, no se aplica ningún filtro.
+        if ($user->hasRole('admin')) {
+            return $query;
+        }
+
+        // Si no tiene el permiso base, no devolvemos nada.
+        if (!$user->hasPermissionTo('contacts.view')) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $roleIds = $user->roles->pluck('id');
+        $permission = \Spatie\Permission\Models\Permission::where('name', 'contacts.view')->first();
+
+        if (!$permission) return $query->whereRaw('1 = 0');
+
+        $rules = \App\Models\PermissionRule::whereIn('role_id', $roleIds)
+            ->where('permission_id', $permission->id)
+            ->get();
+
+        // Si tiene el permiso pero no hay reglas específicas, puede ver todo.
+        if ($rules->isEmpty()) {
+            return $query;
+        }
+        
+        // Aplicamos las reglas a la consulta principal.
+        return $query->where(function (Builder $q) use ($rules, $user) {
+            foreach ($rules as $rule) {
+                $value = str_replace('{user.id}', $user->id, $rule->value);
+
+                if ($rule->field_type === 'native') {
+                    $q->orWhere($rule->field_name, '=', $value);
+                } else { // custom
+                     $q->orWhereHas('customFieldValues', function (Builder $subQuery) use ($rule, $value) {
+                        $subQuery->whereHas('field', fn($sq) => $sq->where('name', $rule->field_identifier))
+                                 ->where('value', '=', $value);
+                    });
+                }
+            }
+        });
+    }
+    
 }

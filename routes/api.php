@@ -42,6 +42,9 @@ use App\Http\Controllers\Api\RealState\LotController;
 use App\Http\Controllers\Api\RealState\ProjectController;
 use App\Http\Controllers\Api\User\UserGroupController;
 use App\Http\Controllers\Api\Settings\IntegrationController;
+use App\Http\Controllers\Api\Settings\PermissionController;
+use App\Http\Controllers\Api\Settings\PermissionRuleController;
+use App\Http\Controllers\Api\Settings\RoleController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -241,6 +244,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('settings')->group(function() {
     // ... (otras rutas de settings)
         Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
+        Route::apiResource('roles', RoleController::class);
+        Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
+        Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();
+        Route::delete('permission-rules/{permissionRule}', [PermissionRuleController::class, 'destroy'])->name('permission-rules.destroy');
     });
 });
 
