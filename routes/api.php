@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 use App\Http\Controllers\Api\CRM\WorkflowController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ForgotPasswordController;
 use App\Http\Controllers\Api\Marketing\CampaignController;
 use App\Http\Controllers\Api\Marketing\MailingListController;
 use App\Http\Controllers\Api\Marketing\SegmentController;
@@ -50,6 +51,9 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/auth/verify-email-login', [AuthController::class, 'verifyEmailLoginCode']);
 Route::post('/auth/verify-app-login', [AuthController::class, 'verifyAppLoginCode']);
+Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name('password.update');
+
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
