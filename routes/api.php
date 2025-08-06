@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\ForgotPasswordController;
 use App\Http\Controllers\Api\Marketing\CampaignController;
 use App\Http\Controllers\Api\Marketing\MailingListController;
 use App\Http\Controllers\Api\Marketing\SegmentController;
+use App\Http\Controllers\Api\Marketing\SubscriptionController;
 use App\Http\Controllers\Api\Marketing\WebhookController;
 use App\Http\Controllers\Api\RealState\DocumentController;
 use App\Http\Controllers\Api\RealState\ExtraController;
@@ -261,3 +262,11 @@ Route::post('webhooks/email-events', [WebhookController::class, 'handleMandrill'
 Route::post('/leads/ingress/{source}', [LeadWebhookController::class, 'ingress'])
     ->name('leads.ingress')
     ->middleware('webhook.validate');
+
+Route::prefix('marketing')->group(function () {
+    // Usamos el UUID para la seguridad, Laravel lo encontrará automáticamente.
+    Route::get('/unsubscribe/{contact:uuid}', [SubscriptionController::class, 'getContactForUnsubscribe'])->name('unsubscribe.show');
+    Route::post('/unsubscribe/{contact:uuid}', [SubscriptionController::class, 'processUnsubscribe'])->name('unsubscribe.process');
+    Route::get('/update-profile/{contact:uuid}', [SubscriptionController::class, 'getContactForUpdateProfile'])->name('profile.show');
+    Route::post('/update-profile/{contact:uuid}', [SubscriptionController::class, 'processProfileUpdate'])->name('profile.process');
+});

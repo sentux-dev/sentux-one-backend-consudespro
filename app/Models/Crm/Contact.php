@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str; 
 
 class Contact extends Model
 {
@@ -30,11 +31,29 @@ class Contact extends Model
         'address',
         'country',
         'active',
+        'unsubscribed_at',
+        'subscribed_to_newsletter',
+        'subscribed_to_product_updates',
+        'subscribed_to_promotions',
+
     ];
 
     protected $casts = [
         'active' => 'boolean',
+        'unsubscribed_at' => 'datetime',
+        'subscribed_to_newsletter' => 'boolean',
+        'subscribed_to_product_updates' => 'boolean',
+        'subscribed_to_promotions' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function ($contact) {
+            if (empty($contact->uuid)) {
+                $contact->uuid = (string) Str::uuid();
+            }
+        });
+    }
 
     /** ============================
      * RELACIONES

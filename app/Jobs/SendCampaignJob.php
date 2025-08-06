@@ -60,11 +60,13 @@ class SendCampaignJob implements ShouldQueue
 
     private function prepareAllVariables(Contact $contact): array
     {
+        $frontendUrl = config('app.frontend_url');
+
         $systemVars = [
             'CURRENT_YEAR' => now()->year,
             'SUBJECT' => $this->campaign->subject,
-            'UNSUB' => url("/marketing/unsubscribe/{$contact->uuid}"),
-            'UPDATE_PROFILE' => url("/marketing/update-profile/{$contact->uuid}"),
+            'UNSUB' => url("{$frontendUrl}/marketing/unsubscribe/{$contact->uuid}"),
+            'UPDATE_PROFILE' => url("{$frontendUrl}/marketing/update-profile/{$contact->uuid}"),
         ];
         $userDefinedVars = $this->campaign->global_merge_vars ?? [];
         $contactVars = [
