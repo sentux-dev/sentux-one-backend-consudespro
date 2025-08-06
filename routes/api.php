@@ -241,6 +241,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('segments/preview', [SegmentController::class, 'preview'])->name('segments.preview');
         // Ruta para exportar contactos de un segmento a CSV
         Route::get('campaigns/{campaign:slug}/export-csv', [CampaignController::class, 'exportCsv'])->name('campaigns.export');
+        Route::post('campaigns/validate-template', [CampaignController::class, 'validateTemplate'])->name('campaigns.validate-template');
 
     });
 

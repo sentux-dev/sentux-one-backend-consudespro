@@ -11,10 +11,19 @@ class Campaign extends Model
 {
     use HasFactory, HasSlug;
     protected $table = 'marketing_campaigns';
+    
     protected $fillable = [
         'name', 'slug', 'subject', 'from_name', 'from_email', 
-        'content_html', 'template_id', 'status', 'scheduled_at', 
-        'sent_at', 'parent_campaign_id', 'variant', 'is_test'
+        'content_html', 'template_id', 'global_merge_vars',
+        'status', 'scheduled_at', 'sent_at', 'parent_campaign_id', 
+        'variant', 'is_test'
+    ];
+
+    protected $casts = [
+        'global_merge_vars' => 'array',
+        'scheduled_at' => 'datetime',
+        'sent_at' => 'datetime',
+        'is_test' => 'boolean',
     ];
 
     public function segments(): BelongsToMany
