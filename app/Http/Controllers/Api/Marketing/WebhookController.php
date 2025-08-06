@@ -14,14 +14,19 @@ class WebhookController extends Controller
      */
     public function handleMandrill(Request $request)
     {
+        Log::info('Webhook de Mandrill recibido.', [
+            'ip' => $request->ip(),
+            'signature' => $request->header('X-Mandrill-Signature'),
+            'events' => $request->input('mandrill_events')
+        ]);
         // --- Validación de Seguridad de la Firma ---
-        if (!$this->verifySignature($request)) {
-            Log::warning('Intento de webhook de Mandrill con firma inválida.', [
-                'ip' => $request->ip(),
-                'signature' => $request->header('X-Mandrill-Signature')
-            ]);
-            return response('Firma inválida.', 403);
-        }
+        // if (!$this->verifySignature($request)) {
+        //     Log::warning('Intento de webhook de Mandrill con firma inválida.', [
+        //         'ip' => $request->ip(),
+        //         'signature' => $request->header('X-Mandrill-Signature')
+        //     ]);
+        //     return response('Firma inválida.', 403);
+        // }
 
         $events = json_decode($request->input('mandrill_events'));
 

@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\Crm\ExternalLead;
 use App\Services\Crm\WorkflowProcessorService;
 use App\Models\Crm\Contact;
+use App\Models\Crm\ContactCustomField;
 use App\Models\Crm\Task; // Importar Task
 use App\Models\User;
 use App\Models\UserGroup;
@@ -75,22 +76,70 @@ class ProcessLeadJob implements ShouldQueue
     {
         $payload = $this->lead->payload;
         $email = data_get($payload, 'email');
+        $phone = data_get($payload, 'phone');
 
-        if (!$email) {
-            throw new \Exception("La acción 'create_contact' falló: el payload no contiene 'email'.");
+        // Validamos que al menos uno de los dos campos exista
+        if (empty($email) && empty($phone)) {
+            throw new \Exception("La acción 'create_contact' falló: el payload no contiene 'email' ni 'phone'.");
         }
 
-        // Busca o crea el contacto y lo guarda en la propiedad de la clase
-        $this->contact = Contact::firstOrCreate(
-            ['email' => $email],
-            [
-                'first_name' => data_get($payload, 'first_name', 'Lead'),
-                'last_name' => data_get($payload, 'last_name', '#' . $this->lead->id),
-                'phone' => data_get($payload, 'phone'),
-                'contact_status_id' => $params['status_id'] ?? 1,
-            ]
-        );
-        $this->logAction('ACTION_EXECUTED', "Contacto creado/encontrado con ID: {$this->contact->id}");
+        $contact = null;
+
+
+        if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->contact = Contact::firstOrCreate(
+                ['email' => $email],
+                [
+                    'first_name' => data_get($payload, 'first_name', 'Lead'),
+                    'last_name' => data_get($payload, 'last_name', '#' . $this->lead->id),
+                    'phone' => $phone,
+                    'contact_status_id' => $params['status_id'] ?? 1,
+                ]
+            );
+            $logMessage = "Contacto creado/encontrado por email con ID: {$this->contact->id}";
+        } 
+        // Si no hay email, pero sí hay teléfono, buscamos por teléfono
+        elseif (!empty($phone)) {
+             $this->contact = Contact::firstOrCreate(
+                ['phone' => $phone],
+                [
+                    'first_name' => data_get($payload, 'first_name', 'Lead'),
+                    'last_name' => data_get($payload, 'last_name', '#' . $this->lead->id),
+                    'email' => null, // Email es null porque no se proporcionó
+                    'contact_status_id' => $params['status_id'] ?? 1,
+                ]
+            );
+            $logMessage = "Contacto creado/encontrado por teléfono con ID: {$this->contact->id}";
+        }
+        
+        if ($this->contact) {
+            $this->saveCustomFields($this->lead->payload);
+            $this->logAction('ACTION_EXECUTED', $logMessage);
+        }
+        else {
+            $this->logAction('ACTION_SKIPPED', "No se pudo crear un contacto, no se proporcionó email ni teléfono.");
+        }
+    }
+
+    private function saveCustomFields(array $payload): void
+    {
+        if (!$this->contact || empty($payload['_custom_fields'])) {
+            return;
+        }
+
+        foreach ($payload['_custom_fields'] as $fieldName => $value) {
+            $field = ContactCustomField::where('name', $fieldName)->first();
+            if ($field) {
+                $this->contact->customFieldValues()->updateOrCreate(
+                    [
+                        'custom_field_id' => $field->id
+                    ],
+                    [
+                        'value' => $value
+                    ]
+                );
+            }
+        }
     }
 
     private function assignOwnerAction(array $params): void

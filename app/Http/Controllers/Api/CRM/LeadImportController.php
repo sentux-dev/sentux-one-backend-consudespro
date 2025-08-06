@@ -2,10 +2,14 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessLeadImportJob;
 use App\Imports\LeadsImport;
+use App\Models\Crm\ContactCustomField;
+use App\Models\Crm\LeadImport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
+use Illuminate\Support\Facades\Auth;
 
 class LeadImportController extends Controller
 {
@@ -17,16 +21,16 @@ class LeadImportController extends Controller
         $request->validate(['file' => 'required|mimes:csv,xlsx,xls']);
 
         $file = $request->file('file');
-        
-        // Extraer solo los encabezados de la primera fila
         $headings = (new HeadingRowImport)->toArray($file)[0][0] ?? [];
-        
-        // Guardar el archivo temporalmente y devolver su ruta y encabezados
         $path = $file->store('imports');
+
+        // 🔹 Obtenemos los campos personalizados activos para el mapeo
+        $customFields = ContactCustomField::where('active', true)->get(['id', 'name', 'label']);
 
         return response()->json([
             'headings' => $headings,
             'file_path' => $path,
+            'custom_fields' => $customFields, // 🔹 Devolvemos los campos
         ]);
     }
 
@@ -35,20 +39,27 @@ class LeadImportController extends Controller
      */
     public function process(Request $request)
     {
+        // 🔹 Validación actualizada para la nueva estructura de mapeo
         $validated = $request->validate([
             'file_path' => 'required|string',
-            'mappings' => 'required|array'
+            'mappings' => 'required|array',
+            'mappings.*.type' => 'required|in:column,static',
+            'mappings.*.value' => 'nullable|string',
         ]);
 
-        try {
-            $import = new LeadsImport($validated['mappings']);
-            Excel::import($import, $validated['file_path']);
-            
-            $leadsCreated = $import->getLeadsCreatedCount();
+        $leadImport = LeadImport::create([
+            'user_id' => Auth::id(),
+            'original_file_name' => $request->input('file_name', 'import.xlsx'),
+            'mappings' => $validated['mappings'],
+        ]);
 
-            return response()->json(['message' => "Importación completada. Se crearon {$leadsCreated} leads."]);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Ocurrió un error al procesar el archivo: ' . $e->getMessage()], 500);
-        }
+        ProcessLeadImportJob::dispatch(
+            $validated['file_path'],
+            $validated['mappings'],
+            Auth::id(),
+            $leadImport->id
+        );
+
+        return response()->json(['message' => 'Tu importación ha comenzado y se procesará en segundo plano.']);
     }
 }

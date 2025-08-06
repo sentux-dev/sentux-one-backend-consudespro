@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
+use App\Http\Controllers\Api\CRM\LeadImportHistoryController;
 use App\Http\Controllers\Api\CRM\LeadProcessingLogController;
 use App\Http\Controllers\Api\CRM\LeadSourceController;
 use App\Http\Controllers\Api\CRM\LeadWebhookController;
@@ -29,9 +30,11 @@ use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 use App\Http\Controllers\Api\CRM\WorkflowController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ForgotPasswordController;
 use App\Http\Controllers\Api\Marketing\CampaignController;
 use App\Http\Controllers\Api\Marketing\MailingListController;
 use App\Http\Controllers\Api\Marketing\SegmentController;
+use App\Http\Controllers\Api\Marketing\SubscriptionController;
 use App\Http\Controllers\Api\Marketing\WebhookController;
 use App\Http\Controllers\Api\RealState\DocumentController;
 use App\Http\Controllers\Api\RealState\ExtraController;
@@ -40,6 +43,10 @@ use App\Http\Controllers\Api\RealState\LotAdjustmentController;
 use App\Http\Controllers\Api\RealState\LotController;
 use App\Http\Controllers\Api\RealState\ProjectController;
 use App\Http\Controllers\Api\User\UserGroupController;
+use App\Http\Controllers\Api\Settings\IntegrationController;
+use App\Http\Controllers\Api\Settings\PermissionController;
+use App\Http\Controllers\Api\Settings\PermissionRuleController;
+use App\Http\Controllers\Api\Settings\RoleController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -49,6 +56,9 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/auth/verify-email-login', [AuthController::class, 'verifyEmailLoginCode']);
 Route::post('/auth/verify-app-login', [AuthController::class, 'verifyAppLoginCode']);
+Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name('password.update');
+
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -123,10 +133,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/tasks/{task}', [TaskController::class, 'updateTask']);
         Route::delete('/tasks/{task}', [TaskController::class, 'deleteTask']);
         // Custom Fields
-        Route::get('/custom-fields', [ContactCustomFieldController::class, 'index']);
-        Route::post('/custom-fields', [ContactCustomFieldController::class, 'store']);
-        Route::put('/custom-fields/{field}', [ContactCustomFieldController::class, 'update']);
-        Route::post('/custom-fields/{field}/desactivate', [ContactCustomFieldController::class, 'desactivate']);
+        Route::apiResource('custom-fields', ContactCustomFieldController::class);
+
 
         Route::prefix('contacts/{contact}/associations')->group(function () {
             Route::get('/', [ContactAssociationController::class, 'index']);
@@ -141,7 +149,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/deals', [DealController::class, 'index']);
         Route::post('/deals', [DealController::class, 'store']); // Ya maneja la asociación con contacto
         Route::put('/deals/{deal}', [DealController::class, 'update']);
-        Route::get('/deals/custom-fields', [DealCustomFieldController::class, 'index']);
+        Route::apiResource('deals/custom-fields', DealCustomFieldController::class);
         Route::get('/deals/{deal}', [DealController::class, 'show']);
         Route::get('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'index']);
         Route::post('/deals/{deal}/custom-fields', [DealCustomFieldValueController::class, 'storeOrUpdate']);
@@ -171,9 +179,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
         Route::post('/leads/{externalLead}/execute-action', [LeadActionController::class, 'executeAction'])->name('leads.executeAction');
         Route::post('/leads/bulk-action', [LeadActionController::class, 'bulkExecuteAction'])->name('leads.bulkAction');
+        Route::post('/leads/process-all-pending', [LeadActionController::class, 'processAllPending'])->name('leads.processAll');
         Route::post('/leads/import', [LeadImportController::class, 'store'])->name('leads.import');
         Route::post('/leads/import/analyze', [LeadImportController::class, 'analyze'])->name('leads.import.analyze');
         Route::post('/leads/import/process', [LeadImportController::class, 'process'])->name('leads.import.process');
+        Route::apiResource('lead-imports', LeadImportHistoryController::class)->only(['index', 'destroy']);
         Route::get('/lead-logs', [LeadProcessingLogController::class, 'index'])->name('leads.logs.index');
 
 
@@ -232,7 +242,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('segments/preview', [SegmentController::class, 'preview'])->name('segments.preview');
         // Ruta para exportar contactos de un segmento a CSV
         Route::get('campaigns/{campaign:slug}/export-csv', [CampaignController::class, 'exportCsv'])->name('campaigns.export');
+        Route::post('campaigns/validate-template', [CampaignController::class, 'validateTemplate'])->name('campaigns.validate-template');
 
+    });
+
+    Route::prefix('settings')->group(function() {
+    // ... (otras rutas de settings)
+        Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
+        Route::apiResource('roles', RoleController::class);
+        Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
+        Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();
+        Route::delete('permission-rules/{permissionRule}', [PermissionRuleController::class, 'destroy'])->name('permission-rules.destroy');
     });
 });
 
@@ -242,3 +262,11 @@ Route::post('webhooks/email-events', [WebhookController::class, 'handleMandrill'
 Route::post('/leads/ingress/{source}', [LeadWebhookController::class, 'ingress'])
     ->name('leads.ingress')
     ->middleware('webhook.validate');
+
+Route::prefix('marketing')->group(function () {
+    // Usamos el UUID para la seguridad, Laravel lo encontrará automáticamente.
+    Route::get('/unsubscribe/{contact:uuid}', [SubscriptionController::class, 'getContactForUnsubscribe'])->name('unsubscribe.show');
+    Route::post('/unsubscribe/{contact:uuid}', [SubscriptionController::class, 'processUnsubscribe'])->name('unsubscribe.process');
+    Route::get('/update-profile/{contact:uuid}', [SubscriptionController::class, 'getContactForUpdateProfile'])->name('profile.show');
+    Route::post('/update-profile/{contact:uuid}', [SubscriptionController::class, 'processProfileUpdate'])->name('profile.process');
+});

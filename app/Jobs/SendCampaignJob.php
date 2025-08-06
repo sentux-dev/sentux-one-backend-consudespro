@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Jobs;
 
 use Illuminate\Bus\Queueable;
@@ -7,70 +6,88 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Services\Email\EmailProviderManager;
 use App\Models\Marketing\Campaign;
 use App\Models\Crm\Contact;
+use App\Services\Email\EmailProviderManager;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 
 class SendCampaignJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    public $failOnTimeout = true;
-    public $tries = 3; // Reintentar hasta 3 veces si falla
-
-    public function __construct(
-        public Campaign $campaign,
-        public Collection $contacts,
-        public bool $isTest = false
-    ){}
+    
+    public function __construct(public Campaign $campaign, public Collection $contacts, public bool $isTest = false) {}
 
     public function handle(EmailProviderManager $emailManager): void
     {
         foreach ($this->contacts as $contact) {
-            // Reemplazar placeholders como {{contact.first_name}}
-            $htmlContent = str_replace('{{contact.first_name}}', $contact->first_name, $this->campaign->content_html);
-            $htmlContent = str_replace('{{contact.last_name}}', $contact->last_name, $htmlContent);
-            $htmlContent = str_replace('{{contact.email}}', $contact->email, $htmlContent);
+            $htmlContent = null;
+            $metadata = [];
+            $variables = $this->prepareAllVariables($contact);
+            
+            if ($this->campaign->template_id) {
+                $providerVars = $this->prepareProviderMergeVars($contact, $variables);
+                $metadata = [
+                    'template_id' => $this->campaign->template_id,
+                    'global_merge_vars' => $providerVars['global'],
+                    'merge_vars' => $providerVars['contact_specific'],
+                ];
+            } else {
+                $htmlContent = $this->campaign->content_html;
+                foreach ($variables as $key => $value) {
+                    $htmlContent = str_replace("*|{$key}|*", $value, $htmlContent);
+                }
+            }
             
             $log = null;
             if (!$this->isTest) {
-                // Crear el registro de log antes de enviar
-                $log = $this->campaign->emailLogs()->create([
-                    'contact_id' => $contact->id,
-                    'status' => 'enviado',
-                ]);
+                $log = $this->campaign->emailLogs()->create(['contact_id' => $contact->id, 'status' => 'enviado']);
             }
 
-            // Enviar a través del manager
             $messageId = $emailManager->driver()->send(
                 $contact->email,
                 $this->campaign->subject,
                 $htmlContent,
                 $this->campaign->from_email,
                 $this->campaign->from_name,
-                $this->isTest ? [] : ['log_id' => $log->id] // Metadatos para el webhook
+                array_merge(['log_id' => $log->id ?? null], $metadata)
             );
-
+            
             if ($messageId && !$this->isTest) {
-                // Si el envío fue exitoso, guardamos el ID del proveedor
                 $log->update(['provider_message_id' => $messageId]);
-            } elseif (!$messageId && !$this->isTest) {
-                // Si el envío falló, lo registramos
-                $log->update([
-                    'status' => 'fallido',
-                    'error_message' => 'La API de correo no devolvió un ID de mensaje.'
-                ]);
             }
         }
     }
-    
-    // Método que se ejecuta si el job falla permanentemente
-    public function failed(\Throwable $exception): void
+
+    private function prepareAllVariables(Contact $contact): array
     {
-        Log::error("Job de envío de campaña falló para la campaña {$this->campaign->id}", [
-            'error' => $exception->getMessage()
-        ]);
+        $frontendUrl = config('app.frontend_url');
+
+        $systemVars = [
+            'CURRENT_YEAR' => now()->year,
+            'SUBJECT' => $this->campaign->subject,
+            'UNSUB' => url("{$frontendUrl}/marketing/unsubscribe/{$contact->uuid}"),
+            'UPDATE_PROFILE' => url("{$frontendUrl}/marketing/update-profile/{$contact->uuid}"),
+        ];
+        $userDefinedVars = $this->campaign->global_merge_vars ?? [];
+        $contactVars = [
+            'FNAME' => $contact->first_name,
+            'LNAME' => $contact->last_name,
+            'EMAIL' => $contact->email,
+        ];
+        return array_merge($systemVars, $userDefinedVars, $contactVars);
+    }
+    
+    private function prepareProviderMergeVars(Contact $contact, array $allVariables): array
+    {
+        $contactSpecific = [];
+        $global = [];
+        foreach ($allVariables as $name => $content) {
+            if (in_array($name, ['FNAME', 'LNAME', 'EMAIL', 'UNSUB', 'UPDATE_PROFILE'])) {
+                $contactSpecific[] = ['name' => $name, 'content' => $content];
+            } else {
+                $global[] = ['name' => $name, 'content' => $content];
+            }
+        }
+        return ['global' => $global, 'contact_specific' => [['rcpt' => $contact->email, 'vars' => $contactSpecific]]];
     }
 }

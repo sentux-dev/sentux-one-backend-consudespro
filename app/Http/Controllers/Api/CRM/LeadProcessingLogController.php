@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Crm;
+namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
 use App\Models\Crm\LeadProcessingLog;

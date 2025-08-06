@@ -6,6 +6,7 @@ use App\Models\Marketing\Campaign;
 use App\Models\Marketing\MailingList;
 use App\Models\Marketing\Segment;
 use App\Jobs\SendCampaignJob;
+use App\Services\Email\EmailProviderManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,13 +28,13 @@ class CampaignController extends Controller
             'from_email' => 'required|email|max:255',
             'content_html' => 'nullable|string',
             'template_id' => 'nullable|string',
+            'global_merge_vars' => 'nullable|array',
             'segment_ids' => 'nullable|array',
             'list_ids' => 'nullable|array',
         ]);
 
         $campaign = Campaign::create($validated);
 
-        // Sincronizar las relaciones
         if (!empty($validated['segment_ids'])) {
             $campaign->segments()->sync($validated['segment_ids']);
         }
@@ -46,7 +47,6 @@ class CampaignController extends Controller
 
     public function show(Campaign $campaign)
     {
-        // Cargar logs para el reporte
         $campaign->load(['segments', 'mailingLists', 'emailLogs.contact:id,first_name,last_name,email']);
         return $campaign;
     }
@@ -60,21 +60,42 @@ class CampaignController extends Controller
             'from_email' => 'required|email|max:255',
             'content_html' => 'nullable|string',
             'template_id' => 'nullable|string',
+            'global_merge_vars' => 'nullable|array',
             'segment_ids' => 'nullable|array',
             'list_ids' => 'nullable|array',
         ]);
 
         $campaign->update($validated);
 
-        // Sincronizar las relaciones
         if ($request->has('segment_ids')) {
-            $campaign->segments()->sync($validated['segment_ids']);
+            $campaign->segments()->sync($validated['segment_ids'] ?? []);
         }
         if ($request->has('list_ids')) {
-            $campaign->mailingLists()->sync($validated['list_ids']);
+            $campaign->mailingLists()->sync($validated['list_ids'] ?? []);
         }
 
         return response()->json($campaign->load(['segments', 'mailingLists']));
+    }
+    
+    public function validateTemplate(Request $request, EmailProviderManager $emailManager)
+    {
+        $validated = $request->validate(['template_name' => 'required|string']);
+        $templateInfo = $emailManager->driver()->getTemplateInfo($validated['template_name']);
+
+        if (!$templateInfo) {
+            return response()->json(['message' => 'No se pudo encontrar la plantilla o hubo un error en la API.'], 404);
+        }
+
+        $html = $templateInfo['code'] ?? '';
+        preg_match_all('/\*\|(.*?)\|\*/', $html, $matches);
+        
+        $systemVars = ['FNAME', 'LNAME', 'EMAIL', 'UNSUB', 'UPDATE_PROFILE', 'CURRENT_YEAR', 'SUBJECT'];
+        $mergeTags = collect($matches[1])->unique()->diff($systemVars)->values();
+
+        return response()->json([
+            'html_preview' => $html,
+            'merge_tags' => $mergeTags,
+        ]);
     }
 
     public function send(Campaign $campaign)
