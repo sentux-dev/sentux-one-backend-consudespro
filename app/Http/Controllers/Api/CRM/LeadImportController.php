@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\CRM;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessLeadImportJob;
 use App\Imports\LeadsImport;
-use App\Models\CRM\ContactCustomField;
+use App\Models\Crm\ContactCustomField;
 use App\Models\Crm\LeadImport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;

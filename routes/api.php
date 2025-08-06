@@ -22,7 +22,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
-use App\Http\Controllers\Api\Crm\LeadImportHistoryController;
+use App\Http\Controllers\Api\CRM\LeadImportHistoryController;
 use App\Http\Controllers\Api\CRM\LeadProcessingLogController;
 use App\Http\Controllers\Api\CRM\LeadSourceController;
 use App\Http\Controllers\Api\CRM\LeadWebhookController;
