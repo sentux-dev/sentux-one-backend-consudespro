@@ -29,12 +29,20 @@ class SendCampaignJob implements ShouldQueue
     public function handle(EmailProviderManager $emailManager): void
     {
         foreach ($this->contacts as $contact) {
-            // Reemplazar placeholders como {{contact.first_name}}
-            $htmlContent = str_replace('{{contact.first_name}}', $contact->first_name, $this->campaign->content_html);
-            $htmlContent = str_replace('{{contact.last_name}}', $contact->last_name, $htmlContent);
-            $htmlContent = str_replace('{{contact.email}}', $contact->email, $htmlContent);
+
+            $htmlContent = $this->campaign->content_html;
+            $mergeVars = $this->prepareMergeVars($contact); // Preparamos las variables
+
+            // Reemplazamos placeholders simples si se usa HTML personalizado
+            if ($htmlContent) {
+                $htmlContent = str_replace('*|CONTACT.FNAME|*', $contact->first_name, $htmlContent);
+                $htmlContent = str_replace('*|CONTACT.LNAME|*', $contact->last_name, $htmlContent);
+                $htmlContent = str_replace('*|CONTACT.EMAIL|*', $contact->email, $htmlContent);
+
+            }
             
             $log = null;
+
             if (!$this->isTest) {
                 // Crear el registro de log antes de enviar
                 $log = $this->campaign->emailLogs()->create([
@@ -50,6 +58,11 @@ class SendCampaignJob implements ShouldQueue
                 $htmlContent,
                 $this->campaign->from_email,
                 $this->campaign->from_name,
+                [ // Pasamos los metadatos al servicio
+                    'log_id' => $log->id ?? null,
+                    'template_id' => $this->campaign->template_id,
+                    'merge_vars' => $mergeVars
+                ],
                 $this->isTest ? [] : ['log_id' => $log->id] // Metadatos para el webhook
             );
 
@@ -64,6 +77,22 @@ class SendCampaignJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    private function prepareMergeVars($contact): array
+    {
+        // Formato específico que requiere la API de Mandrill
+        return [
+            [
+                'rcpt' => $contact->email,
+                'vars' => [
+                    ['name' => 'FNAME', 'content' => $contact->first_name],
+                    ['name' => 'LNAME', 'content' => $contact->last_name],
+                    ['name' => 'EMAIL', 'content' => $contact->email],
+                    // Aquí puedes añadir cualquier otro campo del contacto que necesites
+                ]
+            ]
+        ];
     }
     
     // Método que se ejecuta si el job falla permanentemente

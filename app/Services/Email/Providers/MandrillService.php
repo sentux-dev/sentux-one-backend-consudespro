@@ -13,6 +13,7 @@ class MandrillService implements EmailProviderInterface
     protected string $apiKey;
     protected string $webhookKey;
     protected string $apiUrl = 'https://mandrillapp.com/api/1.0/messages/send.json';
+    protected string $sendTemplateUrl = 'https://mandrillapp.com/api/1.0/messages/send-template.json';
 
     public function __construct(IntegrationService $integrationService)
     {
@@ -26,6 +27,11 @@ class MandrillService implements EmailProviderInterface
         if (empty($this->apiKey)) {
             Log::error('Mandrill API key is not set.');
             return null;
+        }
+
+        // Si se está usando una plantilla, llamamos al método específico
+        if (!empty($metadata['template_id'])) {
+            return $this->sendWithTemplate($recipientEmail, $subject, $fromEmail, $fromName, $metadata);
         }
 
         $response = Http::post($this->apiUrl, [
@@ -48,6 +54,32 @@ class MandrillService implements EmailProviderInterface
         }
 
         Log::error('Mandrill send failed', ['response' => $response->body()]);
+        return null;
+    }
+
+    private function sendWithTemplate(string $recipientEmail, string $subject, string $fromEmail, string $fromName, array $metadata): ?string
+    {
+        $response = Http::post($this->sendTemplateUrl, [
+            'key' => $this->apiKey,
+            'template_name' => $metadata['template_id'],
+            'template_content' => [], // Dejar vacío para usar el contenido de Mandrill
+            'message' => [
+                'subject' => $subject,
+                'from_email' => $fromEmail,
+                'from_name' => $fromName,
+                'to' => [['email' => $recipientEmail, 'type' => 'to']],
+                'track_opens' => true,
+                'track_clicks' => true,
+                'merge_vars' => $metadata['merge_vars'] ?? [], // Aquí pasamos las variables
+                'global_merge_vars' => $metadata['global_merge_vars'] ?? [],
+            ],
+        ]);
+        
+        if ($response->successful() && isset($response->json()[0]['_id'])) {
+            return $response->json()[0]['_id'];
+        }
+
+        Log::error('Mandrill send-template failed', ['response' => $response->body()]);
         return null;
     }
 
