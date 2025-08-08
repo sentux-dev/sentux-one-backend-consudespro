@@ -130,11 +130,8 @@ class TaskController extends Controller
         }
 
         // ✅ Filtro por rango de fechas (schedule_date)
-        if ($request->filled('startDate') && $request->filled('endDate')) {
-            $query->whereBetween('schedule_date', [
-                $request->startDate,
-                $request->endDate
-            ]);
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('schedule_date', [$request->start_date, $request->end_date]);
         }
 
         // ✅ Ordenar por más recientes

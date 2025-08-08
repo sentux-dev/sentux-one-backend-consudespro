@@ -189,27 +189,24 @@ class ContactAssociationController extends Controller
     }
 
 
-    public function destroy(Contact $contact, $id)
+    public function destroy(Contact $contact, $associationId)
     {
-        $association = ContactAssociation::where('contact_id', $contact->id)
-                                         ->where('id', $id)
-                                         ->first();
-
-        if (!$association) {
-            // Si no se encontró en ContactAssociation, buscar en DealAssociation (como asociación polimórfica)
-            $dealAssociation = DealAssociation::where('deal_id', $id) // Asume que 'id' es el deal_id
-                                            ->where('associable_id', $contact->id)
-                                            ->where('associable_type', Contact::class)
-                                            ->first();
-            if ($dealAssociation) {
-                $dealAssociation->delete();
-                return response()->json(['message' => 'Association (deal) deleted successfully.']);
-            }
-            return response()->json(['message' => 'Association not found.'], 404);
+        // Intenta buscar en la tabla de asociaciones directas de contactos
+        $association = ContactAssociation::find($associationId);
+        if ($association && $association->contact_id === $contact->id) {
+            $association->delete();
+            return response()->json(['message' => 'Asociación de contacto eliminada.']);
         }
 
-        $association->delete();
+        // Si no la encontró, busca en la tabla de asociaciones de negocios
+        $dealAssociation = DealAssociation::find($associationId);
+        if ($dealAssociation && $dealAssociation->associable_id === $contact->id && $dealAssociation->associable_type === Contact::class) {
+            $dealAssociation->delete();
+            return response()->json(['message' => 'Asociación de negocio eliminada.']);
+        }
 
-        return response()->json(['message' => 'Association deleted successfully.']);
+        // Si se añaden más tipos de asociaciones (empresas, tickets), se añadirían búsquedas similares aquí
+
+        return response()->json(['message' => 'Asociación no encontrada o no pertenece a este contacto.'], 404);
     }
 }

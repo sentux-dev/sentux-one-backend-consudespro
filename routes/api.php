@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CRM\ActivityController;
+use App\Http\Controllers\Api\CRM\CampaignController as CRMCampaignController;
 use App\Http\Controllers\Api\CRM\ContactAdvancedInfoController;
 use App\Http\Controllers\Api\CRM\ContactAssociationController;
 use App\Http\Controllers\Api\User\Profile\MfaController;
@@ -16,9 +17,11 @@ use App\Http\Controllers\Api\CRM\ContactController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\ContactLookupController;
+use App\Http\Controllers\Api\CRM\ContactStatusController;
 use App\Http\Controllers\Api\CRM\DealController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
+use App\Http\Controllers\Api\CRM\DisqualificationReasonController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
@@ -26,6 +29,7 @@ use App\Http\Controllers\Api\CRM\LeadImportHistoryController;
 use App\Http\Controllers\Api\CRM\LeadProcessingLogController;
 use App\Http\Controllers\Api\CRM\LeadSourceController;
 use App\Http\Controllers\Api\CRM\LeadWebhookController;
+use App\Http\Controllers\Api\CRM\OriginController;
 use App\Http\Controllers\Api\CRM\PipelineController;
 use App\Http\Controllers\Api\CRM\TaskController;
 use App\Http\Controllers\Api\CRM\WorkflowController;
@@ -121,6 +125,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('contacts/{id}/activities', [ActivityController::class, 'index']);
         Route::get('contacts/{contactId}/custom-fields', [ContactCustomFieldValueController::class, 'index']);
         Route::post('contacts/{contactId}/custom-fields', [ContactCustomFieldValueController::class, 'storeOrUpdate']);
+        // Status de contacto
+        Route::post('contact-statuses/update-order', [ContactStatusController::class, 'updateOrder']);
+        Route::apiResource('contact-statuses', ContactStatusController::class);
+        // Razones de descalificación
+        Route::post('disqualification-reasons/update-order', [DisqualificationReasonController::class, 'updateOrder']);
+        Route::apiResource('disqualification-reasons', DisqualificationReasonController::class);
+        // Campañas publicitarias
+        Route::post('campaigns/update-order', [CRMCampaignController::class, 'updateOrder']);
+        Route::apiResource('campaigns', CRMCampaignController::class);
+        // Orígenes de contacto
+        Route::post('origins/update-order', [OriginController::class, 'updateOrder']);
+        Route::apiResource('origins', OriginController::class);
         // Actividades
         Route::post('activities', [ActivityController::class, 'store']);
         Route::delete('activities/{activity}', [ActivityController::class, 'destroy']); // Opcional

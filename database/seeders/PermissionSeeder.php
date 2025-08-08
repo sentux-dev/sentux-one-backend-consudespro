@@ -33,6 +33,9 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'deals.edit', 'guard_name' => $guardName], ['label' => 'Editar Deals']);
         Permission::firstOrCreate(['name' => 'deals.delete', 'guard_name' => $guardName], ['label' => 'Eliminar Deals']);
 
+        Permission::firstOrCreate(['name' => 'tasks.view', 'guard_name' => $guardName], ['label' => 'Ver Tareas']);
+        Permission::firstOrCreate(['name' => 'tasks.view.own', 'guard_name' => $guardName], ['label' => 'Ver Mis Tareas']);
+
         // Módulo de Sincronizador de Leads
         Permission::firstOrCreate(['name' => 'leads.inbox.view', 'guard_name' => $guardName], ['label' => 'Ver Bandeja de Leads']);
         Permission::firstOrCreate(['name' => 'leads.inbox.process', 'guard_name' => $guardName], ['label' => 'Procesar Leads Manualmente']);
@@ -70,6 +73,10 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'settings.lead_sources.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Fuentes de Leads']);
         Permission::firstOrCreate(['name' => 'settings.deals.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Pipelines de Deals']);
         Permission::firstOrCreate(['name' => 'settings.custom_fields.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Campos Personalizados']);
+        Permission::firstOrCreate(['name' => 'settings.disqualification_reasons.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Razones de Descalificación']);
+        Permission::firstOrCreate(['name' => 'settings.contact_statuses.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Estados de Contacto']);
+        Permission::firstOrCreate(['name' => 'settings.origins.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Orígenes de Contacto']);
+        Permission::firstOrCreate(['name' => 'settings.marketing_campaigns.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Campañas Publicitarias']);
 
         // --- CREACIÓN DE ROLES Y ASIGNACIÓN DE PERMISOS ---
 
@@ -88,7 +95,8 @@ class PermissionSeeder extends Seeder
             'deals.create',
             'deals.edit',
             'projects.view',
-            'lots.edit'
+            'lots.edit',
+            'tasks.view.own',
         ]);
 
         // Rol de Gerente de Ventas (ejemplo)
@@ -102,7 +110,8 @@ class PermissionSeeder extends Seeder
             'deals.create',
             'deals.edit',
             'projects.view',
-            'lots.edit'
+            'lots.edit',
+            'tasks.view'
         ]);
         
         // Rol de Marketing (ejemplo)
@@ -119,7 +128,7 @@ class PermissionSeeder extends Seeder
             'campaigns.manage',
             'campaigns.send',
             'campaigns.reports.view',
-            'audiences.manage'
+            'audiences.manage'        
         ]);
     }
 }

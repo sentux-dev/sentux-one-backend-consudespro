@@ -10,6 +10,7 @@ use App\Models\Crm\ContactStatus;
 use App\Models\Crm\DisqualificationReason;
 use App\Models\Crm\Origin;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 class ContactLookupController extends Controller
 {
@@ -43,8 +44,8 @@ class ContactLookupController extends Controller
     public function owners()
     {
         $owners = User::where('active', true)
-            ->orderBy('name')
-            ->get(['id as value', 'name as label']);
+            ->orderBy('first_name')
+            ->get(['id as value', DB::raw("COALESCE(NULLIF(CONCAT_WS(' ', first_name, last_name), ''), email) as label")]);
 
         return response()->json(['data' => $owners]);
     }
@@ -61,7 +62,7 @@ class ContactLookupController extends Controller
     public function disqualificationReasons()
     {
         $reasons = DisqualificationReason::where('active', true)
-            ->orderBy('name')
+            ->orderBy('order')
             ->get(['id as value', 'name as label']);
 
         return response()->json(['data' => $reasons]);
