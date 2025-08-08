@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+export-folder-content.cjs
+
+exports-laravel/

@@ -174,6 +174,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/owners', [ContactLookupController::class, 'owners']);
             Route::get('/status', [ContactLookupController::class, 'status']);
             Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
+            Route::get('/contact-fields', [ContactLookupController::class, 'contactFields']);
         });
 
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');

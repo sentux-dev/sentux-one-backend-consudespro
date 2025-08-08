@@ -13,6 +13,7 @@ use App\Models\Crm\Deal;
 use App\Models\RealState\Project;
 use App\Models\Log;
 use App\Policies\ContactPolicy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -27,63 +28,48 @@ class ContactController extends Controller
      */
     public function index(Request $request)
     {
-
-        // 1. Autorización: ¿Tiene el usuario permiso para ver la lista de contactos?
-        // Esto llamará a ContactPolicy@viewAny. Si devuelve false, se detiene con un error 403.
         $this->authorize('viewAny', Contact::class);
-
         $user = Auth::user();
 
-        // 2. Construcción de la Consulta con Permisos Aplicados
-        // Empezamos la consulta y aplicamos inmediatamente nuestro scope de la policy.
         $query = (new ContactPolicy)->scopeContact(Contact::query(), $user);
 
-        $query = $query->with([
-            'status',
-            'disqualificationReason',
-            'owner',
-            'deals:id,name',
-            'campaigns:id,name',
-            'origins:id,name',
-            'projects:id,name'
+        $query->with([
+            'status', 'disqualificationReason', 'owner', 'deals:id,name',
+            'campaigns:id,name', 'origins:id,name', 'projects:id,name'
         ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
 
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%$search%")
-                    ->orWhere('last_name', 'like', "%$search%")
-                    ->orWhere('email', 'like', "%$search%")
-                    ->orWhere('cellphone', 'like', "%$search%");
-            });
-        }
+        // Filtro de búsqueda general
+        $query->where(function (Builder $q) use ($request) {
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $q->where(function ($subQ) use ($search) {
+                    $subQ->where('first_name', 'like', "%$search%")
+                        ->orWhere('last_name', 'like', "%$search%")
+                        ->orWhere('email', 'like', "%$search%")
+                        ->orWhere('cellphone', 'like', "%$search%");
+                });
+            }
+        });
 
-        if ($request->filled('status_id')) {
-            $query->where('contact_status_id', $request->status_id);
-        }
+        /// ✅ Filtros específicos
+        if ($request->filled('status_id')) $query->where('contact_status_id', $request->status_id);
+        if ($request->filled('owner_id')) $query->whereIn('owner_id', is_array($request->owner_id) ? $request->owner_id : [$request->owner_id]);
+        if ($request->filled('loss_reason_id')) $query->where('disqualification_reason_id', $request->loss_reason_id);
+        
+        // ✅ Filtros de relaciones
+        if ($request->filled('project_id')) $query->whereHas('projects', fn($q) => $q->where('real_state_projects.id', $request->project_id));
+        if ($request->filled('campaign_id')) $query->whereHas('campaigns', fn($q) => $q->where('crm_campaigns.id', $request->campaign_id));
+        if ($request->filled('origin_id')) $query->whereHas('origins', fn($q) => $q->where('crm_origins.id', $request->origin_id));
 
-        if ($request->filled('owner_id')) {
-            $query->where('owner_id', $request->owner_id);
-        }
-
-        if ($request->filled('project_id')) {
-            // Cuando trabaje el modulo de real state
-        }
-
-        if ($request->filled('campaign_id')) {
-            $query->whereHas('campaigns', function ($q) use ($request) {
-                $q->where('crm_campaigns.id', $request->campaign_id);
-            });
-        }
-
-        if ($request->filled('origin_id')) {
-            $query->whereHas('origins', function ($q) use ($request) {
-                $q->where('crm_origins.id', $request->origin_id);
-            });
-        }
-
-        if ($request->filled('loss_reason_id')) {
-            $query->where('disqualification_reason_id', $request->loss_reason_id);
+        // ✅ NUEVO: Lógica para filtrar por campos personalizados
+        foreach ($request->all() as $key => $value) {
+            if (str_starts_with($key, 'cf_') && !empty($value)) {
+                $customFieldSlug = substr($key, 3); // Quita el prefijo 'cf_'
+                $query->whereHas('customFieldValues', function (Builder $q) use ($customFieldSlug, $value) {
+                    $q->where('value', $value)
+                      ->whereHas('field', fn(Builder $sq) => $sq->where('name', $customFieldSlug));
+                });
+            }
         }
 
         if ($request->filled('start_date') && $request->filled('end_date')) {
@@ -92,46 +78,18 @@ class ContactController extends Controller
 
         $sortField = $request->get('sort_field', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
-
-        // Si el campo es full_name, ordenamos por first_name y last_name
+        
         if ($sortField === 'full_name') {
-            $query->orderBy('first_name', $sortOrder)
-                ->orderBy('last_name', $sortOrder);
+            $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
         } else if ($sortField === 'status_name') {
             $query->join('crm_contact_statuses', 'crm_contacts.contact_status_id', '=', 'crm_contact_statuses.id')
-                ->orderBy('crm_contact_statuses.name', $sortOrder);
+                ->orderBy('crm_contact_statuses.name', $sortOrder)->select('crm_contacts.*');
         } else if ($sortField === 'owner_name') {
             $query->join('users as owners', 'crm_contacts.owner_id', '=', 'owners.id')
-                ->orderBy('owners.first_name', $sortOrder)
-                ->orderBy('owners.last_name', $sortOrder);
-        } else if ($sortField === 'deals_names') {
-            $query->leftJoin('crm_contact_crm_deal', 'crm_contacts.id', '=', 'crm_contact_crm_deal.crm_contact_id')
-                ->leftJoin('crm_deals', 'crm_contact_crm_deal.crm_deal_id', '=', 'crm_deals.id')
-                ->select('crm_contacts.*')
-                ->distinct()
-                ->orderBy('crm_deals.name', $sortOrder);
-        } else if ($sortField === 'campaigns_names') {
-            $query->leftJoin('crm_campaign_crm_contact', 'crm_contacts.id', '=', 'crm_campaign_crm_contact.crm_contact_id')
-                ->leftJoin('crm_campaigns', 'crm_campaign_crm_contact.crm_campaign_id', '=', 'crm_campaigns.id')
-                ->select('crm_contacts.*')
-                ->distinct()
-                ->orderBy('crm_campaigns.name', $sortOrder);
-        } else if ($sortField === 'origins_names') {
-            $query->leftJoin('crm_origin_crm_contact', 'crm_contacts.id', '=', 'crm_origin_crm_contact.crm_contact_id')
-                ->leftJoin('crm_origins', 'crm_origin_crm_contact.crm_origin_id', '=', 'crm_origins.id')
-                ->select('crm_contacts.*')
-                ->distinct()
-                ->orderBy('crm_origins.name', $sortOrder);
-        } else if ($sortField === 'projects_names') {
-            $query->leftJoin('crm_contact_real_state_project', 'crm_contacts.id', '=', 'crm_contact_real_state_project.crm_contact_id')
-                ->leftJoin('real_state_projects', 'crm_contact_real_state_project.real_state_project_id', '=', 'real_state_projects.id')
-                ->select('crm_contacts.*')
-                ->distinct()
-                ->orderBy('real_state_projects.name', $sortOrder);
+                ->orderBy('owners.name', $sortOrder)->select('crm_contacts.*');
         } else {
             $query->orderBy($sortField, $sortOrder);
         }
-
 
         $contacts = $query->paginate($request->get('per_page', 10));
 
