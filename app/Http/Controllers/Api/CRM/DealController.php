@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\CRM;
 use App\Http\Controllers\Controller;
 use App\Models\Crm\Contact;
 use App\Models\Crm\Deal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\Crm\DealCustomFieldValue;
 
 class DealController extends Controller
 {
@@ -40,6 +42,17 @@ class DealController extends Controller
             $query->where('name', 'like', "%{$request->search}%");
         }
 
+        foreach ($request->all() as $key => $value) {
+            if (str_starts_with($key, 'cf_') && !empty($value)) {
+                $customFieldName = substr($key, 3); // Quita el prefijo 'cf_'
+                $query->whereHas('customFieldValues', function (Builder $q) use ($customFieldName, $value) {
+                    $q->where('value', $value)
+                      ->whereHas('field', fn(Builder $sq) => $sq->where('name', $customFieldName));
+                });
+            }
+        }
+
+
         $deals = $query->get();
 
         return response()->json([
@@ -65,6 +78,7 @@ class DealController extends Controller
             // 🔹 Aceptamos un array de contact_ids
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'integer|exists:crm_contacts,id',
+            'custom_field_values' => 'nullable|array'
         ]);
 
         $deal = null;
@@ -74,6 +88,19 @@ class DealController extends Controller
             $dealData['owner_id'] = Auth::id();
 
             $deal = Deal::create($dealData);
+
+            // ✅ Lógica para guardar campos personalizados
+            if (!empty($validatedData['custom_field_values'])) {
+                foreach ($validatedData['custom_field_values'] as $field) {
+                    if (isset($field['value']) && $field['value'] !== null) {
+                        DealCustomFieldValue::create([
+                            'deal_id' => $deal->id,
+                            'custom_field_id' => $field['id'],
+                            'value' => $field['value']
+                        ]);
+                    }
+                }
+            }
 
             if (!empty($validatedData['contact_ids'])) {
                 foreach ($validatedData['contact_ids'] as $contactId) {
@@ -108,11 +135,24 @@ class DealController extends Controller
             // 🔹 Aceptamos un array de contact_ids
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'integer|exists:crm_contacts,id',
+            'custom_field_values' => 'nullable|array'
         ]);
 
         DB::beginTransaction();
         try {
             $deal->update($request->except('contact_ids'));
+
+            if (isset($validatedData['custom_field_values'])) {
+                foreach ($validatedData['custom_field_values'] as $field) {
+                    DealCustomFieldValue::updateOrCreate(
+                        [
+                            'deal_id' => $deal->id,
+                            'custom_field_id' => $field['id'],
+                        ],
+                        ['value' => $field['value'] ?? null]
+                    );
+                }
+            }
 
             // 🔹 Lógica de Sincronización
             if (isset($validatedData['contact_ids'])) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
+use App\Models\Crm\Company;
 use App\Models\Crm\Contact;
 use App\Models\Crm\ContactAssociation;
 use App\Models\Crm\Deal; // Importar el modelo Deal
@@ -84,9 +85,20 @@ class ContactAssociationController extends Controller
                 $associationTable = Contact::class;
                 break;
             case 'companies':
-                // Asume que tienes un modelo Company
-                // $associatedModel = Company::find($validatedData['associated_id']);
-                // $associationTable = Company::class;
+                $company = Company::find($validatedData['associated_id']);
+                if (!$company) {
+                    return response()->json(['message' => 'Empresa no encontrada.'], 404);
+                }
+                // Usamos syncWithoutDetaching para añadir sin duplicar
+                $contact->companies()->syncWithoutDetaching([$company->id]);
+                
+                // Cargar la asociación recién creada para devolverla
+                $newAssociation = $contact->companies()->where('company_id', $company->id)->first();
+                
+                return response()->json([
+                    'message' => 'Asociación con empresa creada.',
+                    'association' => $newAssociation // Devolvemos la nueva asociación
+                ], 201);
                 break;
             case 'deals':
                 $associatedModel = Deal::find($request->associated_id);

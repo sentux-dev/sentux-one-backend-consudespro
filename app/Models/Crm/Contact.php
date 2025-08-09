@@ -65,6 +65,12 @@ class Contact extends Model
         return $this->belongsTo(ContactStatus::class, 'contact_status_id');
     }
 
+    public function companies()
+    {
+        return $this->belongsToMany(Company::class, 'crm_company_crm_contact', 'contact_id', 'company_id')
+                    ->withTimestamps();
+    }
+
     public function disqualificationReason()
     {
         return $this->belongsTo(DisqualificationReason::class, 'disqualification_reason_id');

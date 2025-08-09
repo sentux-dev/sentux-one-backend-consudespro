@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CRM\ActivityController;
 use App\Http\Controllers\Api\CRM\CampaignController as CRMCampaignController;
+use App\Http\Controllers\Api\CRM\CompanyController;
+use App\Http\Controllers\Api\CRM\CompanyLookupController;
 use App\Http\Controllers\Api\CRM\ContactAdvancedInfoController;
 use App\Http\Controllers\Api\CRM\ContactAssociationController;
 use App\Http\Controllers\Api\User\Profile\MfaController;
@@ -21,6 +23,7 @@ use App\Http\Controllers\Api\CRM\ContactStatusController;
 use App\Http\Controllers\Api\CRM\DealController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
+use App\Http\Controllers\Api\CRM\DealLookupController;
 use App\Http\Controllers\Api\CRM\DisqualificationReasonController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
@@ -107,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('user-groups', UserGroupController::class);
 
     // Rutas de CRM
+    Route::get('/contacts/{contact}/association-history/{type}', [ContactController::class, 'getAssociationHistory']);
     Route::get('/contacts', [ContactController::class, 'index']);
     Route::post('/contacts', [ContactController::class, 'store']);
     Route::get('/contacts/{contact}', [ContactController::class, 'show']);
@@ -120,14 +124,22 @@ Route::middleware('auth:sanctum')->group(function () {
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 
-    Route::prefix('crm')->group(function () {
+        Route::prefix('crm')->group(function () {
+        // Compañías
+        Route::apiResource('companies', CompanyController::class);
         // Contactos
+        Route::post('contacts/{contact}/add-association-history', [ContactController::class, 'addAssociationHistory']);
         Route::get('contacts/{id}/activities', [ActivityController::class, 'index']);
         Route::get('contacts/{contactId}/custom-fields', [ContactCustomFieldValueController::class, 'index']);
         Route::post('contacts/{contactId}/custom-fields', [ContactCustomFieldValueController::class, 'storeOrUpdate']);
+        Route::apiResource('contact-statuses', ContactStatusController::class);
         // Status de contacto
         Route::post('contact-statuses/update-order', [ContactStatusController::class, 'updateOrder']);
-        Route::apiResource('contact-statuses', ContactStatusController::class);
+        // Empresas
+        Route::get('lookups/companies-search', [CompanyLookupController::class, 'search']);
+
+    Route::apiResource('companies', CompanyController::class);
+
         // Razones de descalificación
         Route::post('disqualification-reasons/update-order', [DisqualificationReasonController::class, 'updateOrder']);
         Route::apiResource('disqualification-reasons', DisqualificationReasonController::class);
@@ -162,6 +174,7 @@ Route::middleware('auth:sanctum')->group(function () {
             // o crear una ruta específica para la eliminación de DealAssociation.
         });
 
+        Route::get('/deals/lookups/custom-fields', [DealLookupController::class, 'customFields']);
         Route::get('/deals', [DealController::class, 'index']);
         Route::post('/deals', [DealController::class, 'store']); // Ya maneja la asociación con contacto
         Route::put('/deals/{deal}', [DealController::class, 'update']);

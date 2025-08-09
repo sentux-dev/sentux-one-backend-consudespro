@@ -23,6 +23,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 class ContactController extends Controller
 {
     use AuthorizesRequests;
+
     /**
      * Listar contactos con paginación, filtros y relaciones.
      */
@@ -38,36 +39,30 @@ class ContactController extends Controller
             'campaigns:id,name', 'origins:id,name', 'projects:id,name'
         ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
 
-        // Filtro de búsqueda general
-        $query->where(function (Builder $q) use ($request) {
-            if ($request->filled('search')) {
-                $search = $request->search;
-                $q->where(function ($subQ) use ($search) {
-                    $subQ->where('first_name', 'like', "%$search%")
-                        ->orWhere('last_name', 'like', "%$search%")
-                        ->orWhere('email', 'like', "%$search%")
-                        ->orWhere('cellphone', 'like', "%$search%");
-                });
-            }
-        });
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function (Builder $q) use ($search) {
+                $q->where('first_name', 'like', "%$search%")
+                  ->orWhere('last_name', 'like', "%$search%")
+                  ->orWhere('email', 'like', "%$search%")
+                  ->orWhere('cellphone', 'like', "%$search%");
+            });
+        }
 
-        /// ✅ Filtros específicos
         if ($request->filled('status_id')) $query->where('contact_status_id', $request->status_id);
         if ($request->filled('owner_id')) $query->whereIn('owner_id', is_array($request->owner_id) ? $request->owner_id : [$request->owner_id]);
         if ($request->filled('loss_reason_id')) $query->where('disqualification_reason_id', $request->loss_reason_id);
         
-        // ✅ Filtros de relaciones
         if ($request->filled('project_id')) $query->whereHas('projects', fn($q) => $q->where('real_state_projects.id', $request->project_id));
         if ($request->filled('campaign_id')) $query->whereHas('campaigns', fn($q) => $q->where('crm_campaigns.id', $request->campaign_id));
         if ($request->filled('origin_id')) $query->whereHas('origins', fn($q) => $q->where('crm_origins.id', $request->origin_id));
 
-        // ✅ NUEVO: Lógica para filtrar por campos personalizados
         foreach ($request->all() as $key => $value) {
             if (str_starts_with($key, 'cf_') && !empty($value)) {
-                $customFieldSlug = substr($key, 3); // Quita el prefijo 'cf_'
-                $query->whereHas('customFieldValues', function (Builder $q) use ($customFieldSlug, $value) {
+                $customFieldName = substr($key, 3);
+                $query->whereHas('customFieldValues', function (Builder $q) use ($customFieldName, $value) {
                     $q->where('value', $value)
-                      ->whereHas('field', fn(Builder $sq) => $sq->where('name', $customFieldSlug));
+                      ->whereHas('field', fn(Builder $sq) => $sq->where('name', $customFieldName));
                 });
             }
         }
@@ -81,18 +76,11 @@ class ContactController extends Controller
         
         if ($sortField === 'full_name') {
             $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
-        } else if ($sortField === 'status_name') {
-            $query->join('crm_contact_statuses', 'crm_contacts.contact_status_id', '=', 'crm_contact_statuses.id')
-                ->orderBy('crm_contact_statuses.name', $sortOrder)->select('crm_contacts.*');
-        } else if ($sortField === 'owner_name') {
-            $query->join('users as owners', 'crm_contacts.owner_id', '=', 'owners.id')
-                ->orderBy('owners.name', $sortOrder)->select('crm_contacts.*');
         } else {
             $query->orderBy($sortField, $sortOrder);
         }
 
         $contacts = $query->paginate($request->get('per_page', 10));
-
         return new ContactCollection($contacts);
     }
 
@@ -101,95 +89,70 @@ class ContactController extends Controller
      */
     public function store(Request $request)
     {
+        // ✅ Validación actualizada: ahora espera IDs individuales, no arrays.
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'nullable|string|max:255',
-            'cellphone' => 'nullable|string|max:50',
-            'phone' => 'nullable|string|max:50',
             'email' => 'required|email|unique:crm_contacts,email',
+            'cellphone' => 'nullable|string|max:50',
             'contact_status_id' => 'required|exists:crm_contact_statuses,id',
-            'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
             'owner_id' => 'nullable|exists:users,id',
-            'occupation' => 'nullable|string|max:255',
-            'job_position' => 'nullable|string|max:255',
-            'birthdate' => 'nullable|date',
-            'address' => 'nullable|string|max:255',
-            'country' => 'nullable|string|max:255',
+            'projects' => 'nullable|array', // Se mantiene como array si un contacto puede tener varios proyectos
+            
+            // ✅ Cambiado a singular y a 'integer'
+            'campaign_id' => 'nullable|integer|exists:crm_campaigns,id',
+            'origin_id' => 'nullable|integer|exists:crm_origins,id',
 
-            // Relaciones
-            'deals' => 'nullable|array',
-            'deals.*' => 'integer|exists:crm_deals,id',
-
-            'projects' => 'nullable|array',
-            'projects.*' => 'integer|exists:real_state_projects,id',
-
-            'campaigns' => 'nullable|array',
-            'campaigns.*' => 'integer|exists:crm_campaigns,id',
-
-            'origins' => 'nullable|array',
-            'origins.*' => 'integer|exists:crm_origins,id',
+            'custom_fields' => 'nullable|array',
+            'custom_fields.*.field_id' => 'required|exists:crm_contact_custom_fields,id',
+            'custom_fields.*.value' => 'nullable|string|max:65535',
         ]);
 
         DB::beginTransaction();
         try {
-            // Crear el contacto
-            $contact = Contact::create([
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'] ?? null,
-                'cellphone' => $validated['cellphone'] ?? null,
-                'phone' => $validated['phone'] ?? null,
-                'email' => $validated['email'],
-                'contact_status_id' => $validated['contact_status_id'],
-                'disqualification_reason_id' => $validated['disqualification_reason_id'] ?? null,
-                'owner_id' => $validated['owner_id'] ?? null,
-                'occupation' => $validated['occupation'] ?? null,
-                'job_position' => $validated['job_position'] ?? null,
-                'birthdate' => $validated['birthdate'] ?? null,
-                'address' => $validated['address'] ?? null,
-                'country' => $validated['country'] ?? null,
-            ]);
+            // Se crea el contacto con los campos principales
+            $contact = Contact::create($validated);
 
-            // Guardar relaciones
-            if (!empty($validated['deals'])) {
-                $contact->deals()->attach($validated['deals']);
+            // Guardar campos personalizados
+            if (!empty($validated['custom_fields'])) {
+                foreach ($validated['custom_fields'] as $cf) {
+                    if (!is_null($cf['value'])) {
+                        $contact->customFieldValues()->create([
+                            'custom_field_id' => $cf['field_id'],
+                            'value' => $cf['value']
+                        ]);
+                    }
+                }
             }
-
+            
+            // Guardar proyectos (se mantiene igual)
             if (!empty($validated['projects'])) {
                 $contact->projects()->attach($validated['projects']);
             }
 
-            if (!empty($validated['campaigns'])) {
-                // Marcar la primera campaña como original y la última como is_last
-                $contact->campaigns()->attach(collect($validated['campaigns'])->mapWithKeys(function ($id, $index) use ($validated) {
-                    return [
-                        $id => [
-                            'is_original' => $index === 0,
-                            'is_last' => $index === array_key_last($validated['campaigns']),
-                        ]
-                    ];
-                })->toArray());
+            // ✅ --- LÓGICA DE CAMPAÑA SIMPLIFICADA ---
+            if (!empty($validated['campaign_id'])) {
+                // Al ser la primera, es tanto la original como la última.
+                $contact->campaigns()->attach($validated['campaign_id'], [
+                    'is_original' => true,
+                    'is_last' => true
+                ]);
             }
 
-            if (!empty($validated['origins'])) {
-                // Igual que con campañas: original y última
-                $contact->origins()->attach(collect($validated['origins'])->mapWithKeys(function ($id, $index) use ($validated) {
-                    return [
-                        $id => [
-                            'is_original' => $index === 0,
-                            'is_last' => $index === array_key_last($validated['origins']),
-                        ]
-                    ];
-                })->toArray());
+            // ✅ --- LÓGICA DE ORIGEN SIMPLIFICADA ---
+            if (!empty($validated['origin_id'])) {
+                // Al ser el primero, es tanto el original como el último.
+                $contact->origins()->attach($validated['origin_id'], [
+                    'is_original' => true,
+                    'is_last' => true
+                ]);
             }
-
-            // Log
-            $this->logAction('create_contact', 'Contact', $contact->id, $contact->toArray());
 
             DB::commit();
 
             return response()->json([
                 'message' => 'Contacto creado correctamente',
-                'contact' => $contact->load(['status', 'owner', 'deals', 'projects', 'campaigns', 'origins'])
+                'contact' => $contact->load(['status', 'owner', 'projects', 'campaigns', 'origins'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -197,113 +160,52 @@ class ContactController extends Controller
             return response()->json(['message' => 'Error al crear contacto', 'error' => $e->getMessage()], 500);
         }
     }
-
+    
     /**
-     * Ver un contacto con sus relaciones.
+     * Ver un contacto específico.
      */
     public function show(Contact $contact)
     {
         $user = Auth::user();
-        // 1. Autorización: ¿Tiene el usuario permiso para ver este contacto?
         $query = (new ContactPolicy)->scopeContact(Contact::query(), $user);
-        // 3. Cargar relaciones necesarias
         $query->with([
-            'status',
-            'disqualificationReason',
-            'owner',
-            'deals:id,name',
-            'campaigns:id,name',
-            'origins:id,name',
-            'projects:id,name'
+            'status', 'disqualificationReason', 'owner', 'deals:id,name',
+            'campaigns:id,name', 'origins:id,name', 'projects:id,name'
         ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
 
         return new ContactResource($query->findOrFail($contact->id));
-
     }
 
     /**
-     * Actualizar un contacto.
+     * Actualiza un contacto completo (PUT).
      */
     public function update(Request $request, Contact $contact)
     {
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'nullable|string|max:255',
-            'cellphone' => 'nullable|string|max:50',
-            'phone' => 'nullable|string|max:50',
             'email' => "required|email|unique:crm_contacts,email,{$contact->id}",
-            'contact_status_id' => 'required|exists:crm_contact_statuses,id',
-            'disqualification_reason_id' => 'nullable|exists:crm_disqualification_reasons,id',
-            'owner_id' => 'nullable|exists:users,id',
-            'occupation' => 'nullable|string|max:255',
-            'job_position' => 'nullable|string|max:255',
-            'birthdate' => 'nullable|date',
-            'address' => 'nullable|string|max:255',
-            'country' => 'nullable|string|max:255',
-            'deals' => 'array',
-            'campaigns' => 'array',
-            'origins' => 'array',
-            'projects' => 'array',
+            'projects' => 'sometimes|array',
+            'campaigns' => 'sometimes|array',
+            'origins' => 'sometimes|array',
         ]);
-
-        if (!empty($validated['birthdate'])) {
-            $validated['birthdate'] = \Carbon\Carbon::parse($validated['birthdate'])->format('Y-m-d');
-        }
 
         DB::beginTransaction();
         try {
-            $oldData = $contact->toArray();
-
-            // Actualizar solo campos del modelo principal
             $contact->update($validated);
 
-            // Sincronizar relaciones
-            $contact->deals()->sync($validated['deals'] ?? []);
-            $contact->campaigns()->sync($validated['campaigns'] ?? []);
-            $contact->origins()->sync($validated['origins'] ?? []);
-            $contact->projects()->sync($validated['projects'] ?? []);
-
-            // Capturar solo cambios reales en los campos del contacto
-            $changedFields = [];
-            foreach ($contact->getChanges() as $field => $newValue) {
-                // Omitimos timestamps para evitar ruido en los logs
-                if (in_array($field, ['updated_at', 'created_at'])) {
-                    continue;
-                }
-                $changedFields[$field] = [
-                    'old' => $oldData[$field] ?? null,
-                    'new' => $newValue
-                ];
+            if ($request->has('projects')) {
+                $contact->projects()->sync($validated['projects'] ?? []);
             }
-
-            // Si también quieres registrar cambios en relaciones
-            $relationChanges = [];
-            if (isset($validated['deals'])) {
-                $relationChanges['deals'] = $validated['deals'];
+            if ($request->has('campaigns')) {
+                $this->updateAssociationHistory($contact, 'campaigns', $validated['campaigns'] ?? []);
             }
-            if (isset($validated['campaigns'])) {
-                $relationChanges['campaigns'] = $validated['campaigns'];
-            }
-            if (isset($validated['origins'])) {
-                $relationChanges['origins'] = $validated['origins'];
-            }
-            if (isset($validated['projects'])) {
-                $relationChanges['projects'] = $validated['projects'];
-            }
-
-            $logData = [
-                'fields' => $changedFields,
-                'relations' => $relationChanges
-            ];
-
-            // Registrar log solo si hay cambios
-            if (!empty($changedFields) || !empty($relationChanges)) {
-                $this->logAction('update_contact', 'Contact', $contact->id, $logData);
+            if ($request->has('origins')) {
+                $this->updateAssociationHistory($contact, 'origins', $validated['origins'] ?? []);
             }
 
             DB::commit();
-
-            return response()->json(['message' => 'Contacto actualizado correctamente', 'contact' => $contact]);
+            return response()->json(['message' => 'Contacto actualizado correctamente', 'contact' => $contact->fresh()->load('projects', 'campaigns', 'origins')]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -311,69 +213,136 @@ class ContactController extends Controller
         }
     }
 
+    /**
+     * Actualiza campos específicos de un contacto (PATCH).
+     */
     public function updatePatch(Request $request, Contact $contact): JsonResponse
     {
-        // ✅ Validación previa (opcional, pero mejora UX)
-        if ($request->has('email') && $request->email !== $contact->email) {
-            $exists = Contact::where('email', $request->email)
-                ->where('id', '<>', $contact->id)
-                ->exists();
-
-            if ($exists) {
-                return response()->json([
-                    'message' => 'El correo electrónico ya está asociado a otro contacto.'
-                ], 422);
-            }
-        }
-
-        if ($request->filled('birthdate')) {
-            $request->merge([
-                'birthdate' => \Carbon\Carbon::parse($request->input('birthdate'))->format('Y-m-d')
-            ]);
-        }
+        $validated = $request->validate([
+            'first_name' => 'sometimes|string|max:255',
+            'last_name' => 'sometimes|string|max:255',
+            'email' => "sometimes|email|unique:crm_contacts,email,{$contact->id}",
+            'campaigns' => 'sometimes|array',
+            'origins' => 'sometimes|array',
+        ]);
 
         try {
+            DB::beginTransaction();
+            
             $contact->fill($request->only([
-                'first_name',
-                'last_name',
-                'phone',
-                'cellphone',
-                'email',
-                'occupation',
-                'job_position',
-                'current_company',
-                'birthdate',
-                'contact_status_id',
-                'lead_status',
-                'owner_id',
-                'interest_project',
-                'source',
-                'disqualification_reason_id',
-                'address',
-                'country',
+                'first_name', 'last_name', 'phone', 'cellphone', 'email', 'occupation', 
+                'job_position', 'birthdate', 'contact_status_id', 'owner_id', 
+                'disqualification_reason_id', 'address', 'country',
             ]));
-
+            
+            if ($request->has('campaigns')) {
+                $this->updateAssociationHistory($contact, 'campaigns', $validated['campaigns']);
+            }
+            if ($request->has('origins')) {
+                $this->updateAssociationHistory($contact, 'origins', $validated['origins']);
+            }
+            
             $contact->save();
+            DB::commit();
             
             $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
+            return (new ContactResource($contact))->response()->setStatusCode(200);
 
-            return (new ContactResource($contact))
-                ->response()
-                ->setStatusCode(200);
-
-        } catch (QueryException $e) {
-            if ($e->getCode() === '23000') {
-                return response()->json([
-                    'message' => 'El correo electrónico ya está asociado a otro contacto.'
-                ], 422);
-            }
-
-            return response()->json([
-                'message' => 'Error al actualizar el contacto',
-                'error' => $e->getMessage()
-            ], 500);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error al actualizar el contacto', 'error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Añade una nueva entrada al historial de asociaciones (Campañas u Orígenes).
+     */
+    public function addAssociationHistory(Request $request, Contact $contact)
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'string', \Illuminate\Validation\Rule::in(['campaigns', 'origins'])],
+            'source_id' => ['required', 'integer'],
+        ]);
+
+        $relationName = $validated['type'];
+        $sourceId = $validated['source_id'];
+        $relation = $contact->{$relationName}();
+
+        if (!$relation->getRelated()->where('id', $sourceId)->exists()) {
+            return response()->json(['message' => 'El ID de la fuente proporcionada no es válido.'], 422);
+        }
+        
+        DB::beginTransaction();
+        try {
+            $relation->newPivotQuery()->update(['is_last' => false]);
+            $relation->attach($sourceId, ['is_original' => false, 'is_last' => true]);
+            DB::commit();
+            return response()->json(['message' => 'Se ha añadido una nueva entrada al historial del contacto.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error al añadir la entrada al historial.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Devuelve el historial de asociaciones para un contacto.
+     */
+    public function getAssociationHistory(Contact $contact, string $type)
+    {
+        if (!in_array($type, ['campaigns', 'origins'])) {
+            return response()->json(['message' => 'Tipo de asociación no válido.'], 400);
+        }
+
+        $history = $contact->{$type}()
+            ->withPivot('created_at', 'is_original', 'is_last')
+            ->orderBy('pivot_created_at', 'asc')
+            ->get();
+            
+        $formattedHistory = $history->map(function ($item) {
+            return [
+                'name' => $item->name,
+                'assigned_at' => $item->pivot->created_at->toDateTimeString(),
+                'is_original' => (bool)$item->pivot->is_original,
+                'is_last' => (bool)$item->pivot->is_last,
+            ];
+        });
+        return response()->json($formattedHistory);
+    }
+    
+    /**
+     * Lógica centralizada para actualizar el historial de asociaciones.
+     */
+    private function updateAssociationHistory(Contact $contact, string $relationName, array $newIds): void
+    {
+        $relation = $contact->{$relationName}();
+        $existingIds = $relation->pluck($relation->getRelated()->getTable().'.id')->toArray();
+
+        $idsToAdd = array_diff($newIds, $existingIds);
+        $idsToRemove = array_diff($existingIds, $newIds);
+
+        if (!empty($idsToRemove)) {
+            $relation->detach($idsToRemove);
+        }
+        if (!empty($idsToAdd)) {
+            $attachData = [];
+            foreach ($idsToAdd as $id) {
+                $attachData[$id] = ['is_original' => false, 'is_last' => false];
+            }
+            $relation->attach($attachData);
+        }
+
+        $relation->newPivotQuery()->update(['is_last' => false]);
+        
+        $latestAssociation = $relation->orderBy('pivot_created_at', 'desc')->first();
+        if ($latestAssociation) {
+            $relation->updateExistingPivot($latestAssociation->id, ['is_last' => true]);
+        }
+    }
+ 
+
+    /**
+     * Actualiza los datos básicos de un contacto.
+     */
 
     public function updateBasic(Request $request, Contact $contact)
     {
@@ -478,4 +447,5 @@ class ContactController extends Controller
             'changes' => $changes ? json_encode($changes) : null,
         ]);
     }
+
 }

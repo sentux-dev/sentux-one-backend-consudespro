@@ -26,6 +26,8 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'contacts.create', 'guard_name' => $guardName], ['label' => 'Crear Contactos']);
         Permission::firstOrCreate(['name' => 'contacts.edit', 'guard_name' => $guardName], ['label' => 'Editar Contactos']);
         Permission::firstOrCreate(['name' => 'contacts.delete', 'guard_name' => $guardName], ['label' => 'Eliminar/Desactivar Contactos']);
+
+        Permission::firstOrCreate(['name' => 'companies.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Empresas']);
         
         Permission::firstOrCreate(['name' => 'deals.view', 'guard_name' => $guardName], ['label' => 'Ver Deals']);
         Permission::firstOrCreate(['name' => 'deals.view.own', 'guard_name' => $guardName], ['label' => 'Ver Mis Deals']);
