@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\DealLookupController;
 use App\Http\Controllers\Api\CRM\DisqualificationReasonController;
+use App\Http\Controllers\Api\CRM\EmailTemplateController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
@@ -147,6 +148,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('contacts/{contact}/sequence-enrollments', [ContactController::class, 'getSequenceEnrollments']);
         Route::post('contacts/{contact}/sequence-enrollments/{enrollment}/stop', [ContactController::class, 'stopSequenceEnrollment']);
+
+        Route::apiResource('email-templates', EmailTemplateController::class);
 
         // Razones de descalificación
         Route::post('disqualification-reasons/update-order', [DisqualificationReasonController::class, 'updateOrder']);
