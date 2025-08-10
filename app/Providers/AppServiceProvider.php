@@ -41,7 +41,13 @@ class AppServiceProvider extends ServiceProvider
 
         // Si ya tenés esto para API, lo dejás:
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by(optional($request->user())->id ?: $request->ip());
+            if ($request->user()) {
+                // Si el usuario está autenticado, le damos un límite más alto.
+                return Limit::perMinute(200)->by($request->user()->id);
+            }
+            
+            // Si no está autenticado (es un invitado), le damos el límite estándar.
+            return Limit::perMinute(60)->by($request->ip());
         });
     }
 }

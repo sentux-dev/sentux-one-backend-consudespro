@@ -8,8 +8,10 @@ use App\Http\Resources\CRM\ContactResource;
 use Illuminate\Http\Request;
 use App\Models\Crm\Contact;
 use App\Models\Crm\Campaign;
+use App\Models\Crm\ContactSequenceEnrollment;
 use App\Models\Crm\Origin;
 use App\Models\Crm\Deal;
+use App\Models\Crm\Sequence;
 use App\Models\RealState\Project;
 use App\Models\Log;
 use App\Policies\ContactPolicy;
@@ -447,6 +449,66 @@ class ContactController extends Controller
             'entity_id' => $entityId,
             'changes' => $changes ? json_encode($changes) : null,
         ]);
+    }
+
+    public function enrollInSequence(Request $request, Contact $contact)
+    {
+        $validated = $request->validate(['sequence_id' => 'required|integer|exists:crm_sequences,id']);
+        $sequenceId = $validated['sequence_id'];
+
+        if ($contact->sequenceEnrollments()->where('sequence_id', $sequenceId)->where('status', 'active')->exists()) {
+            return response()->json(['message' => 'El contacto ya está activo en esta secuencia.'], 409);
+        }
+
+        $firstStep = Sequence::find($sequenceId)->steps()->orderBy('order')->first();
+        $nextStepDueAt = null;
+        if ($firstStep) {
+            $nextStepDueAt = now()->add($firstStep->delay_unit, $firstStep->delay_amount);
+        }
+
+        ContactSequenceEnrollment::create([
+            'contact_id' => $contact->id,
+            'sequence_id' => $sequenceId,
+            'enrolled_at' => now(),
+            'status' => 'active',
+            'current_step' => 0,
+            'next_step_due_at' => $nextStepDueAt,
+        ]);
+        
+        return response()->json(['message' => 'Contacto inscrito en la secuencia con éxito.']);
+    }
+
+    public function getSequenceEnrollments(Contact $contact)
+    {
+        $enrollments = $contact->sequenceEnrollments()
+            // Carga la relación 'sequence', pero solo selecciona las columnas 'id' y 'name'
+            // para que la respuesta sea más ligera y eficiente.
+            ->with('sequence:id,name') 
+            ->where('status', 'active')
+            ->get();
+            
+        return response()->json($enrollments);
+    }
+
+    public function stopSequenceEnrollment(Contact $contact, ContactSequenceEnrollment $enrollment)
+    {
+        // 1. Verificación de seguridad: Asegurarse de que la inscripción que se quiere
+        //    detener realmente pertenece al contacto especificado en la URL.
+        //    Esto previene que se pueda detener la secuencia de un contacto diferente por error.
+        if ($enrollment->contact_id !== $contact->id) {
+            return response()->json(['message' => 'Esta inscripción no pertenece al contacto especificado.'], 403); // 403 Forbidden
+        }
+
+        // 2. Actualizar el estado de la inscripción.
+        //    Cambiamos el estado a 'stopped' y ponemos la fecha del próximo paso en null
+        //    para que el comando programado la ignore por completo.
+        $enrollment->update([
+            'status' => 'stopped',
+            'next_step_due_at' => null
+        ]);
+
+        // 3. Devolver una respuesta de éxito.
+        return response()->json(['message' => 'La secuencia ha sido detenida para este contacto.']);
     }
 
 }

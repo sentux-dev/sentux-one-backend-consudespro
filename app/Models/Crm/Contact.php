@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str; 
 
@@ -198,6 +199,11 @@ class Contact extends Model
                 }
             }
         });
+    }
+
+    public function sequenceEnrollments(): HasMany
+    {
+        return $this->hasMany(ContactSequenceEnrollment::class);
     }
     
 }

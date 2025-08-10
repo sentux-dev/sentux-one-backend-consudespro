@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\CRM\LeadSourceController;
 use App\Http\Controllers\Api\CRM\LeadWebhookController;
 use App\Http\Controllers\Api\CRM\OriginController;
 use App\Http\Controllers\Api\CRM\PipelineController;
+use App\Http\Controllers\Api\CRM\SequenceController;
 use App\Http\Controllers\Api\CRM\TaskController;
 use App\Http\Controllers\Api\CRM\WorkflowController;
 use App\Http\Controllers\Api\DashboardController;
@@ -121,10 +122,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/contacts/{contact}/reactivate', [ContactController::class, 'reactivate']);
     Route::get('/contacts/{contact}/advanced-info', [ContactAdvancedInfoController::class, 'show']);
     Route::patch('/contacts/{contact}/advanced-info', [ContactAdvancedInfoController::class, 'update']);
-        // Dashboard
-        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 
-        Route::prefix('crm')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
+
+    Route::prefix('crm')->group(function () {
         // Compañías
         Route::apiResource('companies', CompanyController::class);
         // Contactos
@@ -138,7 +140,13 @@ Route::middleware('auth:sanctum')->group(function () {
         // Empresas
         Route::get('lookups/companies-search', [CompanyLookupController::class, 'search']);
 
-    Route::apiResource('companies', CompanyController::class);
+        Route::apiResource('companies', CompanyController::class);
+
+        Route::apiResource('sequences', SequenceController::class);
+        Route::post('contacts/{contact}/enroll-in-sequence', [ContactController::class, 'enrollInSequence']);
+
+        Route::get('contacts/{contact}/sequence-enrollments', [ContactController::class, 'getSequenceEnrollments']);
+        Route::post('contacts/{contact}/sequence-enrollments/{enrollment}/stop', [ContactController::class, 'stopSequenceEnrollment']);
 
         // Razones de descalificación
         Route::post('disqualification-reasons/update-order', [DisqualificationReasonController::class, 'updateOrder']);

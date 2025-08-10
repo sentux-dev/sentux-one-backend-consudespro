@@ -21,7 +21,9 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\AssignmentCounter;
 use App\Models\Crm\ContactEntryHistory;
 use App\Models\Crm\Campaign;
+use App\Models\Crm\ContactSequenceEnrollment;
 use App\Models\Crm\Origin;
+use App\Models\Crm\Sequence;
 use Illuminate\Support\Arr;
 
 class ProcessLeadJob implements ShouldQueue
@@ -169,7 +171,39 @@ class ProcessLeadJob implements ShouldQueue
             case 'notify_user':
                 $this->notifyUserAction($action->parameters);
                 break;
+            case 'enroll_in_sequence':
+                $this->enrollInSequenceAction($action->parameters);
+                break;
         }
+    }
+
+    private function enrollInSequenceAction(array $params): void
+    {
+        if (!$this->contact) {
+            $this->logAction('ACTION_SKIPPED', "Se omitió 'enroll_in_sequence' porque no hay un contacto asociado.");
+            return;
+        }
+
+        $sequenceId = data_get($params, 'sequence_id');
+        if (!$sequenceId) return;
+
+        // Inscribir al contacto (lógica similar a la del ContactController)
+        $firstStep = Sequence::find($sequenceId)->steps()->orderBy('order')->first();
+        $nextStepDueAt = null;
+        if ($firstStep) {
+            $nextStepDueAt = now()->add($firstStep->delay_unit, $firstStep->delay_amount);
+        }
+
+        ContactSequenceEnrollment::create([
+            'contact_id' => $this->contact->id,
+            'sequence_id' => $sequenceId,
+            'enrolled_at' => now(),
+            'status' => 'active',
+            'current_step' => 0,
+            'next_step_due_at' => $nextStepDueAt,
+        ]);
+
+        $this->logAction('ACTION_EXECUTED', "Contacto ID: {$this->contact->id} inscrito en la secuencia ID: {$sequenceId}");
     }
 
     private function createContactAction(array $params): void

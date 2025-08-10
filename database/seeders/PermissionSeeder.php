@@ -79,6 +79,7 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'settings.contact_statuses.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Estados de Contacto']);
         Permission::firstOrCreate(['name' => 'settings.origins.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Orígenes de Contacto']);
         Permission::firstOrCreate(['name' => 'settings.marketing_campaigns.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Campañas Publicitarias']);
+        Permission::firstOrCreate(['name' => 'settings.sequences.manage', 'guard_name' => $guardName], ['label' => 'Gestionar Secuencias de Contacto']);
 
         // --- CREACIÓN DE ROLES Y ASIGNACIÓN DE PERMISOS ---
 
