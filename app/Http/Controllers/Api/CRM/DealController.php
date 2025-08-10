@@ -23,6 +23,10 @@ class DealController extends Controller
             $query->where('pipeline_id', $request->pipeline_id);
         }
 
+        if ($request->filled('stage_id')) {
+            $query->where('stage_id', $request->stage_id);
+        }
+
         if ($request->filled('owner_id')) {
             $query->where('owner_id', $request->owner_id);
         }

@@ -81,9 +81,9 @@ class ContactResource extends JsonResource
             'created_at' => $this->created_at ? $this->created_at->toISOString() : null,
 
             // Newsletter subscription
-            'newsletter' => false,
-            'productUpdated' => false,
-            'promotions' => false,
+            'subscribed_to_newsletter' => $this->subscribed_to_newsletter,
+            'subscribed_to_product_updates' => $this->subscribed_to_product_updates,
+            'subscribed_to_promotions' => $this->subscribed_to_promotions,
         ];
     }
 }

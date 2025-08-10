@@ -233,6 +233,7 @@ class ContactController extends Controller
                 'first_name', 'last_name', 'phone', 'cellphone', 'email', 'occupation', 
                 'job_position', 'birthdate', 'contact_status_id', 'owner_id', 
                 'disqualification_reason_id', 'address', 'country',
+                'subscribed_to_newsletter', 'subscribed_to_product_updates', 'subscribed_to_promotions'
             ]));
             
             if ($request->has('campaigns')) {

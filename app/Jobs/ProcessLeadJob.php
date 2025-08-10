@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Models\AssignmentCounter;
+use App\Models\Crm\ContactEntryHistory;
+use App\Models\Crm\Campaign;
+use App\Models\Crm\Origin;
 
 class ProcessLeadJob implements ShouldQueue
 {
@@ -34,6 +37,36 @@ class ProcessLeadJob implements ShouldQueue
 
     public function handle(WorkflowProcessorService $processor): void
     {
+        // ✅ --- NUEVA LÓGICA: BUSCAR O CREAR CAMPAÑA Y ORIGEN ---
+        $payload = $this->lead->payload;
+        $campaignId = null;
+        $originId = null;
+
+        // Buscar o crear la Campaña
+        if ($campaignName = data_get($payload, 'campaign')) {
+            $campaign = Campaign::firstOrCreate(
+                ['name' => trim($campaignName)],
+                ['active' => true, 'order' => 999] // Valores por defecto para campañas creadas automáticamente
+            );
+            $campaignId = $campaign->id;
+        }
+
+        // Buscar o crear el Origen
+        if ($originName = data_get($payload, 'origin')) {
+            $origin = Origin::firstOrCreate(
+                ['name' => trim($originName)],
+                ['active' => true, 'order' => 999] // Valores por defecto para orígenes creados automáticamente
+            );
+            $originId = $origin->id;
+        }
+        
+        // Guardamos los IDs resueltos en el payload para usarlos después en el historial
+        // Usamos una clave '_meta' para no interferir con los datos originales del lead.
+        data_set($payload, '_meta.campaign_id', $campaignId);
+        data_set($payload, '_meta.origin_id', $originId);
+        $this->lead->payload = $payload; // Actualizamos el payload en la instancia del job
+        // --- FIN DE LA NUEVA LÓGICA ---
+
         $workflow = $processor->findMatchingWorkflow($this->lead);
         if (!$workflow) {
             $this->logAction('NO_WORKFLOW_MATCH', 'No se encontró un workflow aplicable.');
@@ -88,6 +121,8 @@ class ProcessLeadJob implements ShouldQueue
             throw new \Exception("La acción 'create_contact' falló: el payload no contiene 'email' ni 'phone'.");
         }
 
+        $logMessage = ''; // Inicializamos la variable
+
         if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->contact = Contact::firstOrCreate(
                 ['email' => $email],
@@ -99,9 +134,9 @@ class ProcessLeadJob implements ShouldQueue
                 ]
             );
             $logMessage = "Contacto creado/encontrado por email con ID: {$this->contact->id}";
-        } 
+        }
         elseif (!empty($phone)) {
-             $this->contact = Contact::firstOrCreate(
+            $this->contact = Contact::firstOrCreate(
                 ['phone' => $phone],
                 [
                     'first_name' => data_get($payload, 'first_name', 'Lead'),
@@ -114,6 +149,20 @@ class ProcessLeadJob implements ShouldQueue
         }
         
         if ($this->contact) {
+            // ✅ --- NUEVA LÓGICA PARA REGISTRAR EL HISTORIAL DE INGRESO ---
+            // Este bloque se ejecuta cada vez que el job procesa un lead y lo asocia a un contacto.
+            ContactEntryHistory::create([
+                'contact_id'       => $this->contact->id,
+                'entry_at'         => now(),
+                // Nota: Asumimos que el origin_id y campaign_id se guardan en el payload.
+                // Si los tienes directamente en el modelo ExternalLead, puedes usar: $this->lead->origin_id
+                'origin_id'        => data_get($payload, '_meta.origin_id'),
+                'campaign_id'      => data_get($payload, '_meta.campaign_id'),
+                'external_lead_id' => $this->lead->id,
+                'details'          => $payload // Guardamos el payload completo como referencia
+            ]);
+            // --- FIN DE LA NUEVA LÓGICA ---
+
             $this->saveCustomFields($this->lead->payload);
             $this->logAction('ACTION_EXECUTED', $logMessage);
         }
