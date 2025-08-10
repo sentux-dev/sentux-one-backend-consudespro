@@ -49,8 +49,13 @@ class WorkflowController extends Controller
             }
 
             // 3. Crear las acciones asociadas
-            if (!empty($validated['actions'])) {
-                $workflow->actions()->createMany($validated['actions']);
+             if (!empty($validated['actions'])) {
+                $actionsWithOrder = [];
+                foreach ($validated['actions'] as $index => $action) {
+                    $action['order'] = $index; // Asignamos el índice del array como el orden
+                    $actionsWithOrder[] = $action;
+                }
+                $workflow->actions()->createMany($actionsWithOrder);
             }
         });
 
@@ -97,7 +102,12 @@ class WorkflowController extends Controller
             
             $workflow->actions()->delete();
             if (!empty($validated['actions'])) {
-                $workflow->actions()->createMany($validated['actions']);
+                $actionsWithOrder = [];
+                foreach ($validated['actions'] as $index => $action) {
+                    $action['order'] = $index; // Asignamos el índice del array como el orden
+                    $actionsWithOrder[] = $action;
+                }
+                $workflow->actions()->createMany($actionsWithOrder);
             }
         });
 

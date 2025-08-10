@@ -12,6 +12,7 @@ use App\Services\Crm\WorkflowProcessorService;
 use App\Models\Crm\Contact;
 use App\Models\Crm\ContactCustomField;
 use App\Models\Crm\Task;
+use App\Models\Crm\Workflow;
 use App\Models\User;
 use App\Models\UserGroup;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,19 @@ use App\Models\AssignmentCounter;
 use App\Models\Crm\ContactEntryHistory;
 use App\Models\Crm\Campaign;
 use App\Models\Crm\Origin;
+use Illuminate\Support\Arr;
 
 class ProcessLeadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected ?Contact $contact = null;
+
+    // ✅ Nuevos tipos de acciones de transformación
+    const TRANSFORMATION_ACTIONS = [
+        'rename_field',
+        'set_payload_field',
+    ];
 
     private array $allowedStandardFields = [
         'first_name', 'last_name', 'email', 'phone', 'cellphone', 'country', 
@@ -35,52 +43,39 @@ class ProcessLeadJob implements ShouldQueue
 
     public function __construct(public ExternalLead $lead) {}
 
+    /**
+     * ✅ MÉTODO HANDLE REFACTORIZADO CON LÓGICA DE DOS FASES
+     */
     public function handle(WorkflowProcessorService $processor): void
     {
-        // ✅ --- NUEVA LÓGICA: BUSCAR O CREAR CAMPAÑA Y ORIGEN ---
-        $payload = $this->lead->payload;
-        $campaignId = null;
-        $originId = null;
-
-        // Buscar o crear la Campaña
-        if ($campaignName = data_get($payload, 'campaign')) {
-            $campaign = Campaign::firstOrCreate(
-                ['name' => trim($campaignName)],
-                ['active' => true, 'order' => 999] // Valores por defecto para campañas creadas automáticamente
-            );
-            $campaignId = $campaign->id;
-        }
-
-        // Buscar o crear el Origen
-        if ($originName = data_get($payload, 'origin')) {
-            $origin = Origin::firstOrCreate(
-                ['name' => trim($originName)],
-                ['active' => true, 'order' => 999] // Valores por defecto para orígenes creados automáticamente
-            );
-            $originId = $origin->id;
-        }
-        
-        // Guardamos los IDs resueltos en el payload para usarlos después en el historial
-        // Usamos una clave '_meta' para no interferir con los datos originales del lead.
-        data_set($payload, '_meta.campaign_id', $campaignId);
-        data_set($payload, '_meta.origin_id', $originId);
-        $this->lead->payload = $payload; // Actualizamos el payload en la instancia del job
-        // --- FIN DE LA NUEVA LÓGICA ---
-
+        // 1. Encontrar un workflow que coincida con el PAYLOAD ORIGINAL.
         $workflow = $processor->findMatchingWorkflow($this->lead);
+
         if (!$workflow) {
             $this->logAction('NO_WORKFLOW_MATCH', 'No se encontró un workflow aplicable.');
             return;
         }
         
         $this->logAction('WORKFLOW_MATCHED', "Aplicando workflow: '{$workflow->name}'");
+
         DB::beginTransaction();
         try {
-            foreach ($workflow->actions as $action) {
-                $this->executeAction($action);
+            // 2. Aplicar las transformaciones de ESE workflow al payload en memoria.
+            $this->applyWorkflowTransformations($workflow);
+            
+            // 3. AHORA, buscar o crear la campaña/origen usando el payload TRANSFORMADO.
+            $this->resolveSourceIds();
+
+            // 4. Ejecutar las acciones de ejecución (crear contacto, etc.).
+            foreach ($workflow->actions->whereNotIn('action_type', self::TRANSFORMATION_ACTIONS) as $action) {
+                $this->executeExecutionAction($action);
             }
             
-            $this->lead->update(['status' => 'procesado', 'processed_at' => now()]);
+            // 5. Guardar el estado final del lead y su payload modificado.
+            $this->lead->status = 'procesado';
+            $this->lead->processed_at = now();
+            $this->lead->save();
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -90,7 +85,73 @@ class ProcessLeadJob implements ShouldQueue
         }
     }
 
-    private function executeAction($action): void
+    /**
+     * ✅ Nuevo método que aplica las transformaciones de un workflow específico.
+     */
+    private function applyWorkflowTransformations(Workflow $workflow): void
+    {
+        $payload = $this->lead->payload;
+        
+        // Obtenemos solo las acciones de transformación de ESTE workflow, en su orden correcto.
+        $transformationActions = $workflow->actions()->whereIn('action_type', self::TRANSFORMATION_ACTIONS)->get();
+
+        foreach ($transformationActions as $action) {
+            $params = $action->parameters;
+            switch ($action->action_type) {
+                case 'rename_field':
+                    $originalKey = data_get($params, 'original_key');
+                    $newKey = data_get($params, 'new_key');
+                    if ($originalKey && $newKey && Arr::has($payload, $originalKey)) {
+                        $value = Arr::get($payload, $originalKey);
+                        Arr::set($payload, $newKey, $value);
+                        Arr::forget($payload, $originalKey);
+                        $this->logAction('PAYLOAD_TRANSFORMED', "Campo '{$originalKey}' renombrado a '{$newKey}'.");
+                    }
+                    break;
+                
+                case 'set_payload_field':
+                    $key = data_get($params, 'field_key');
+                    $value = data_get($params, 'field_value');
+                    if ($key) {
+                        Arr::set($payload, $key, $value);
+                        $this->logAction('PAYLOAD_TRANSFORMED', "Valor del campo '{$key}' establecido.");
+                    }
+                    break;
+            }
+        }
+        
+        // Actualizamos el payload en la instancia del lead para la siguiente fase
+        $this->lead->payload = $payload;
+    }
+
+    private function resolveSourceIds(): void
+    {
+        $payload = $this->lead->payload;
+        $campaignId = null;
+        $originId = null;
+
+        if ($campaignName = data_get($payload, 'campaign')) {
+            $campaign = Campaign::firstOrCreate(
+                ['name' => trim($campaignName)],
+                ['active' => true, 'order' => 999]
+            );
+            $campaignId = $campaign->id;
+        }
+
+        if ($originName = data_get($payload, 'origin')) {
+            $origin = Origin::firstOrCreate(
+                ['name' => trim($originName)],
+                ['active' => true, 'order' => 999]
+            );
+            $originId = $origin->id;
+        }
+        
+        data_set($payload, '_meta.campaign_id', $campaignId);
+        data_set($payload, '_meta.origin_id', $originId);
+        $this->lead->payload = $payload;
+    }
+
+    private function executeExecutionAction($action): void
     {
         switch ($action->action_type) {
             case 'create_contact':
