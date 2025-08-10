@@ -187,5 +187,26 @@ class DealController extends Controller
             return response()->json(['message' => 'Error al actualizar el negocio'], 500);
         }
     }
+    
+
+    public function getAssociationStatus(Deal $deal, int $contactId)
+    {
+        // Contamos el total de asociaciones que tiene el negocio, sin importar el tipo.
+        $totalAssociations = $deal->dealAssociations()->count();
+
+        // Verificamos que el contacto que se quiere eliminar realmente esté asociado.
+        $isAssociated = $deal->dealAssociations()
+                             ->where('associable_type', \App\Models\Crm\Contact::class)
+                             ->where('associable_id', $contactId)
+                             ->exists();
+        
+        // El negocio quedará huérfano si solo tiene 1 asociación en total,
+        // y es precisamente la que estamos a punto de eliminar.
+        $willBeOrphaned = ($totalAssociations === 1 && $isAssociated);
+
+        return response()->json([
+            'will_be_orphaned' => $willBeOrphaned
+        ]);
+    }
 
 }

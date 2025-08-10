@@ -114,43 +114,48 @@ class ContactAssociationController extends Controller
 
     public function destroy(Contact $contact, string $type, int $associationId)
     {
-        $deleted = false;
+        $message = 'Asociación eliminada correctamente.'; // Mensaje por defecto
 
         switch ($type) {
             case 'contacts':
-                // Para contacto-a-contacto, el associationId es el ID de la tabla crm_contact_associations
-                $association = ContactAssociation::where('id', $associationId)
-                                                 ->where('contact_id', $contact->id)
-                                                 ->first();
+                $association = ContactAssociation::where('id', $associationId)->where('contact_id', $contact->id)->first();
                 if ($association) {
                     $association->delete();
-                    $deleted = true;
+                    return response()->json(['message' => $message]);
                 }
                 break;
             
             case 'companies':
-                // Para empresas, el associationId es el ID de la EMPRESA.
-                // Usamos detach() en la relación para eliminar el registro de la tabla pivote.
                 if ($contact->companies()->detach($associationId)) {
-                    $deleted = true;
+                    return response()->json(['message' => $message]);
                 }
                 break;
 
             case 'deals':
-                 // Para negocios, el associationId es el ID del NEGOCIO.
-                $dealAssociation = DealAssociation::where('associable_id', $contact->id)
+                // Aquí, associationId es el ID del NEGOCIO (deal_id)
+                $deal = Deal::find($associationId);
+                
+                // Buscamos el registro específico de la asociación para eliminarlo
+                $dealAssociation = DealAssociation::where('deal_id', $deal->id)
                                                   ->where('associable_type', Contact::class)
-                                                  ->where('deal_id', $associationId)
+                                                  ->where('associable_id', $contact->id)
                                                   ->first();
+                
                 if ($dealAssociation) {
-                    $dealAssociation->delete();
-                    $deleted = true;
+                    $dealAssociation->delete(); // Eliminamos la asociación
+                    
+                    // Después de eliminar, volvemos a cargar el negocio para recontar sus asociaciones
+                    $deal->refresh();
+                    
+                    // Si ya no tiene NINGUNA asociación, eliminamos el negocio
+                    if ($deal->dealAssociations()->count() === 0) {
+                        $deal->delete();
+                        $message = 'Asociación eliminada. El negocio se borró al quedar sin asociaciones.';
+                    }
+                    
+                    return response()->json(['message' => $message]);
                 }
                 break;
-        }
-
-        if ($deleted) {
-            return response()->json(['message' => 'Asociación eliminada correctamente.']);
         }
 
         return response()->json(['message' => 'Asociación no encontrada o no pertenece a este contacto.'], 404);
