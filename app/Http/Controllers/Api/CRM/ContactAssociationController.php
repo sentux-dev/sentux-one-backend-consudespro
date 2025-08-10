@@ -9,178 +9,89 @@ use App\Models\Crm\ContactAssociation;
 use App\Models\Crm\Deal; // Importar el modelo Deal
 use App\Models\Crm\DealAssociation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class ContactAssociationController extends Controller
 {
     public function index(Contact $contact)
     {
-        // Eager load only the 'associatedContact' relationship, as ContactAssociation
-        // primarily handles Contact-to-Contact links.
-        $contactAssociations = $contact->associations()->with('associatedContact')->get();
 
-        // Also, load the polymorphic associations where THIS contact is associated with other models
-        // (e.g., Deals that this Contact is associated with via crm_deal_associations).
-        // This is where you'd retrieve deals, companies, tickets, orders that are linked TO THIS CONTACT.
-        $dealAssociations = $contact->dealAssociations()->with('deal')->get(); // 'deal' is the inverse of the polymorphic relation in DealAssociation
+        // Log de deals->associations
+        Log::info('ContactAssociationController@index', [
+            'contact_id' => $contact->id,
+            'associations_count' => $contact->associations->count(),
+            'companies_count' => $contact->companies->count(),
+            'deals_count' => $contact->deals->count(),
+        ]);
 
-        // You might need to add similar relationships for companies, tickets, orders
-        // if they also have `morphMany` back to Contact.
-        // For example, if a Company has morphMany associations and one of them is a Contact:
-        // $companyAssociations = $contact->companyAssociations()->with('company')->get(); // You'd need a 'companyAssociations' relation on Contact model
+        // Cargar las relaciones necesarias
+        $contact->load(['companies', 'deals.dealAssociations.associable', 'associations.associatedContact']);
 
-        $formattedAssociations = [
-            'contacts' => [],
-            'companies' => [],
-            'deals' => [],
-            'tickets' => [],
-            'orders' => [],
-        ];
-
-        // Format Contact-to-Contact associations
-        foreach ($contactAssociations as $association) {
-            if ($association->associatedContact) {
-                $formattedAssociations['contacts'][] = [
-                    'id' => $association->associatedContact->id,
-                    'name' => $association->associatedContact->first_name . ' ' . $association->associatedContact->last_name,
-                    'relation_type' => $association->relation_type,
-                    'association_id' => $association->id, // ID of the pivot table
+        return response()->json([
+            'contacts' => $contact->associations->map(function ($assoc) {
+                return [
+                    'id' => $assoc->associatedContact->id,
+                    'name' => $assoc->associatedContact->first_name . ' ' . $assoc->associatedContact->last_name,
+                    'association_id' => $assoc->id,
                 ];
-            }
-        }
-
-        // Format Deal associations where this contact is linked to a deal
-        foreach ($dealAssociations as $dealAssociation) {
-            if ($dealAssociation->deal) { // Access the 'deal' relationship defined in DealAssociation model
-                $formattedAssociations['deals'][] = [
-                    'id' => $dealAssociation->deal->id,
-                    'name' => $dealAssociation->deal->name,
-                    'relation_type' => $dealAssociation->relation_type,
-                    'association_id' => $dealAssociation->id, // ID of the deal_associations table record
+            }),
+            'companies' => $contact->companies->map(function ($company) {
+                return [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                    'association_id' => $company->pivot->id, // El ID de la tabla pivote
                 ];
-            }
-        }
-
-        // Add similar loops for Companies, Tickets, Orders if they have polymorphic associations to Contact
-        // and you retrieve them correctly (e.g., via $contact->companyAssociations).
-        // You'll need to define those inverse polymorphic relations on your Contact model.
-
-        return response()->json($formattedAssociations);
+            }),
+            'deals' => $contact->deals->map(function ($deal) {
+                 return [
+                    'id' => $deal->id,
+                    'name' => $deal->name,
+                    'association_id' => $deal->dealAssociations->first()->id ?? null,
+                ];
+            }),
+        ]);
     }
 
     public function store(Request $request, Contact $contact)
     {
         $validatedData = $request->validate([
-            'association_type' => ['required', 'string', Rule::in(['contacts', 'companies', 'deals', 'tickets', 'orders'])],
-            'relation_type' => 'nullable|string|max:255',
+            'association_type' => ['required', 'string', Rule::in(['contacts', 'companies', 'deals'])],
             'associated_id' => 'required|integer',
         ]);
 
-        $associatedModel = null;
-        $associationTable = null;
+        $type = $validatedData['association_type'];
+        $associatedId = $validatedData['associated_id'];
 
-        switch ($validatedData['association_type']) {
+        switch ($type) {
             case 'contacts':
-                $associatedModel = Contact::find($request->associated_id); 
-                $associationTable = Contact::class;
-                break;
+                $association = ContactAssociation::create([
+                    'contact_id' => $contact->id,
+                    'associated_contact_id' => $associatedId,
+                    'association_type' => 'contacts',
+                ]);
+                return response()->json(['message' => 'Asociación creada.', 'association' => $association], 201);
+
             case 'companies':
-                $company = Company::find($validatedData['associated_id']);
-                if (!$company) {
+                if (!$company = Company::find($associatedId)) {
                     return response()->json(['message' => 'Empresa no encontrada.'], 404);
                 }
-                // Usamos syncWithoutDetaching para añadir sin duplicar
-                $contact->companies()->syncWithoutDetaching([$company->id]);
-                
-                // Cargar la asociación recién creada para devolverla
-                $newAssociation = $contact->companies()->where('company_id', $company->id)->first();
-                
-                return response()->json([
-                    'message' => 'Asociación con empresa creada.',
-                    'association' => $newAssociation // Devolvemos la nueva asociación
-                ], 201);
-                break;
+                // attach() es la forma correcta de añadir a una relación muchos-a-muchos
+                $contact->companies()->attach($company->id);
+                return response()->json(['message' => 'Asociación con empresa creada.'], 201);
+
             case 'deals':
-                $associatedModel = Deal::find($request->associated_id);
-                $associationTable = Deal::class; 
-                break;
-            case 'tickets':
-                // Asume que tienes un modelo Ticket
-                // $associatedModel = Ticket::find($validatedData['associated_id']);
-                // $associationTable = Ticket::class;
-                break;
-            case 'orders':
-                // Asume que tienes un modelo Order
-                // $associatedModel = Order::find($validatedData['associated_id']);
-                // $associationTable = Order::class;
-                break;
+                if (!$deal = Deal::find($associatedId)) {
+                    return response()->json(['message' => 'Negocio no encontrado.'], 404);
+                }
+                
+                // Usamos el método `associate` que ya existe en tu modelo Deal,
+                // que se encarga de crear el registro en la tabla `crm_deal_associations`.
+                $deal->associate($contact, $validatedData['relation_type']);
+                
+                return response()->json(['message' => 'Asociación con negocio creada.'], 201);
         }
-
-        if (!$associatedModel) {
-            return response()->json(['message' => 'Associated entity not found.'], 404);
-        }
-
-        if ($validatedData['association_type'] === 'contacts') {
-            $existingAssociation = ContactAssociation::where('contact_id', $contact->id)
-                ->where('associated_contact_id', $associatedModel->id)
-                ->first();
-
-            if ($existingAssociation) {
-                return response()->json(['message' => 'Association already exists.'], 409);
-            }
-
-            $association = ContactAssociation::create([
-                'contact_id' => $contact->id,
-                'associated_contact_id' => $associatedModel->id,
-                'association_type' => $validatedData['association_type'],
-                'relation_type' => $validatedData['relation_type'],
-            ]);
-            return response()->json(['message' => 'Association created successfully.', 'association' => $association], 201);
-        }
-
-        if ($associatedModel && $associatedModel instanceof Deal) { 
-            $existingPolymorphicAssociation = $associatedModel->dealAssociations()
-                ->where('associable_id', $contact->id)
-                ->where('associable_type', Contact::class)
-                ->first();
-
-            if ($existingPolymorphicAssociation) {
-                return response()->json(['message' => 'Polymorphic association already exists.'], 409);
-            }
-
-            $polymorphicAssociation = $associatedModel->associate(
-                $contact,
-                $validatedData['relation_type']
-            );
-
-            return response()->json(['message' => 'Polymorphic association created successfully.', 'association' => $polymorphicAssociation], 201);
-        }
-
-        // Para asociaciones polimórficas (Company, Ticket, Order)
-        if ($associatedModel && $associationTable) {
-            // Verificar si ya existe esta asociación polimórfica inversa
-            // Esto es crucial para evitar duplicados en crm_deal_associations
-            $existingPolymorphicAssociation = $associatedModel->associations() // Acceder a la relación de asociaciones del modelo asociado (ej. Deal)
-                ->where('associable_id', $contact->id)
-                ->where('associable_type', Contact::class)
-                ->first();
-
-            if ($existingPolymorphicAssociation) {
-                return response()->json(['message' => 'Polymorphic association already exists.'], 409);
-            }
-
-            // Crear la asociación polimórfica en la tabla crm_deal_associations (o la correspondiente)
-            $polymorphicAssociation = $associatedModel->associations()->create([
-                'associable_id' => $contact->id,
-                'associable_type' => Contact::class, // El tipo de modelo que se asocia al Deal
-                'relation_type' => $validatedData['relation_type'],
-            ]);
-
-            return response()->json(['message' => 'Polymorphic association created successfully.', 'association' => $polymorphicAssociation], 201);
-        }
-
-
-        return response()->json(['message' => 'Invalid association type.'], 400);
+        return response()->json(['message' => 'Tipo de asociación no válido.'], 400);
     }
 
 
@@ -201,23 +112,46 @@ class ContactAssociationController extends Controller
     }
 
 
-    public function destroy(Contact $contact, $associationId)
+    public function destroy(Contact $contact, string $type, int $associationId)
     {
-        // Intenta buscar en la tabla de asociaciones directas de contactos
-        $association = ContactAssociation::find($associationId);
-        if ($association && $association->contact_id === $contact->id) {
-            $association->delete();
-            return response()->json(['message' => 'Asociación de contacto eliminada.']);
+        $deleted = false;
+
+        switch ($type) {
+            case 'contacts':
+                // Para contacto-a-contacto, el associationId es el ID de la tabla crm_contact_associations
+                $association = ContactAssociation::where('id', $associationId)
+                                                 ->where('contact_id', $contact->id)
+                                                 ->first();
+                if ($association) {
+                    $association->delete();
+                    $deleted = true;
+                }
+                break;
+            
+            case 'companies':
+                // Para empresas, el associationId es el ID de la EMPRESA.
+                // Usamos detach() en la relación para eliminar el registro de la tabla pivote.
+                if ($contact->companies()->detach($associationId)) {
+                    $deleted = true;
+                }
+                break;
+
+            case 'deals':
+                 // Para negocios, el associationId es el ID del NEGOCIO.
+                $dealAssociation = DealAssociation::where('associable_id', $contact->id)
+                                                  ->where('associable_type', Contact::class)
+                                                  ->where('deal_id', $associationId)
+                                                  ->first();
+                if ($dealAssociation) {
+                    $dealAssociation->delete();
+                    $deleted = true;
+                }
+                break;
         }
 
-        // Si no la encontró, busca en la tabla de asociaciones de negocios
-        $dealAssociation = DealAssociation::find($associationId);
-        if ($dealAssociation && $dealAssociation->associable_id === $contact->id && $dealAssociation->associable_type === Contact::class) {
-            $dealAssociation->delete();
-            return response()->json(['message' => 'Asociación de negocio eliminada.']);
+        if ($deleted) {
+            return response()->json(['message' => 'Asociación eliminada correctamente.']);
         }
-
-        // Si se añaden más tipos de asociaciones (empresas, tickets), se añadirían búsquedas similares aquí
 
         return response()->json(['message' => 'Asociación no encontrada o no pertenece a este contacto.'], 404);
     }

@@ -167,7 +167,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::prefix('contacts/{contact}/associations')->group(function () {
             Route::get('/', [ContactAssociationController::class, 'index']);
             Route::post('/', [ContactAssociationController::class, 'store']);
-            Route::delete('{id}', [ContactAssociationController::class, 'destroy']);
+            Route::put('/{type}/{associationId}', [ContactAssociationController::class, 'update']);
+            Route::delete('/{type}/{associationId}', [ContactAssociationController::class, 'destroy']);
             // Nota: Para la eliminación de asociaciones polimórficas (como Deal a Contact),
             // la ruta DELETE puede necesitar ajustarse si el `id` no es el `association_id` de la tabla pivot.
             // Considera enviar `deal_id` y `contact_id` en el cuerpo de la solicitud DELETE

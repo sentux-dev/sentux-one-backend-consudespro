@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str; 
 
 class Contact extends Model
@@ -67,8 +68,7 @@ class Contact extends Model
 
     public function companies()
     {
-        return $this->belongsToMany(Company::class, 'crm_company_crm_contact', 'contact_id', 'company_id')
-                    ->withTimestamps();
+        return $this->belongsToMany(Company::class, 'crm_company_contact', 'contact_id', 'company_id');
     }
 
     public function disqualificationReason()
@@ -86,10 +86,15 @@ class Contact extends Model
         return $this->hasMany(ContactCustomField::class, 'contact_id');
     }
 
-    public function deals()
+    public function deals(): MorphToMany
     {
-        return $this->belongsToMany(Deal::class, 'crm_contact_crm_deal', 'crm_contact_id', 'crm_deal_id')
-            ->withTimestamps();
+        return $this->morphToMany(
+            Deal::class,                // El modelo final al que nos conectamos
+            'associable',               // El prefijo usado en la tabla polimórfica
+            'crm_deal_associations',    // El nombre de la tabla de asociaciones
+            'associable_id',            // La columna para el ID de este modelo (Contact)
+            'deal_id'                   // La columna para el ID del otro modelo (Deal)
+        )->withTimestamps()->withPivot('relation_type'); // Incluir campos extra de la tabla pivote
     }
 
     public function projects()
