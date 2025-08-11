@@ -12,6 +12,8 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Crm\Task; 
 
 class User extends Authenticatable
 {
@@ -68,7 +70,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'active' => 'boolean',
             'last_active_at' => 'datetime',
-            'active' => 'boolean'
+            'active' => 'boolean',
+            'theme_preferences' => 'array',
+
         ];
     }
 
@@ -92,6 +96,11 @@ class User extends Authenticatable
     public function groups(): BelongsToMany
     {
         return $this->belongsToMany(UserGroup::class, 'user_group_members', 'user_id', 'user_group_id');
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class, 'owner_id');
     }
     
 }

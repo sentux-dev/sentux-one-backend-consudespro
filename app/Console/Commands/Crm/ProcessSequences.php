@@ -14,15 +14,17 @@ class ProcessSequences extends Command
 {
     /**
      * The name and signature of the console command.
+     *
      * @var string
      */
     protected $signature = 'crm:process-sequences';
 
     /**
      * The console command description.
+     *
      * @var string
      */
-    protected $description = 'Procesa los pasos pendientes en las secuencias de automatización.';
+    protected $description = 'Procesa los pasos pendientes y pre-genera tareas manuales en las secuencias.';
 
     /**
      * Execute the console command.
@@ -31,102 +33,151 @@ class ProcessSequences extends Command
     {
         $this->info('Iniciando procesamiento de secuencias...');
 
-        // ✅ 1. Carga previa (Eager Loading) del contacto y su propietario.
-        // Esto es mucho más eficiente y asegura que los datos siempre estén disponibles.
-        $enrollments = ContactSequenceEnrollment::where('status', 'active')
-            ->where('next_step_due_at', '<=', now())
-            ->with('contact.owner') // Cargar el contacto y el propietario del contacto
-            ->get();
+        // FASE 1: Pre-generar tareas manuales que vencen en las próximas 24 horas.
+        $this->generateUpcomingManualTasks();
 
-        if ($enrollments->isEmpty()) {
-            $this->info('No hay pasos de secuencia pendientes para ejecutar.');
-            return 0;
-        }
-
-        $this->info("Se encontraron {$enrollments->count()} pasos pendientes. Procesando...");
-
-        foreach ($enrollments as $enrollment) {
-            $sequence = $enrollment->sequence;
-            $nextStep = $sequence->steps()->where('order', $enrollment->current_step)->first();
-
-            if (!$nextStep) {
-                $enrollment->update(['status' => 'completed', 'next_step_due_at' => null]);
-                $this->info("Secuencia #{$sequence->id} completada para el contacto #{$enrollment->contact_id}.");
-                continue;
-            }
-
-            $this->executeStepAction($enrollment, $nextStep);
-
-            $stepAfterNext = $sequence->steps()->where('order', $nextStep->order + 1)->first();
-            $nextDueDate = null;
-            if ($stepAfterNext) {
-                $nextDueDate = Carbon::parse($enrollment->enrolled_at)
-                    ->add($stepAfterNext->delay_unit, $stepAfterNext->delay_amount);
-            }
-
-            $enrollment->update([
-                'current_step' => $nextStep->order + 1,
-                'next_step_due_at' => $nextDueDate,
-                'status' => $stepAfterNext ? 'active' : 'completed',
-            ]);
-
-            $this->info("Paso #{$nextStep->order} de la secuencia #{$sequence->id} ejecutado para el contacto #{$enrollment->contact_id}.");
-        }
+        // FASE 2: Ejecutar pasos que vencen ahora (principalmente correos).
+        $this->executeDueSteps();
 
         $this->info('Procesamiento de secuencias finalizado.');
         return 0;
     }
 
-    private function executeStepAction($enrollment, $step)
+    /**
+     * Busca y crea tareas manuales que están programadas para las próximas 24 horas.
+     */
+    private function generateUpcomingManualTasks()
     {
-        $contact = $enrollment->contact;
-        if (!$contact) {
-            $this->error("-> Error: No se encontró el contacto #{$enrollment->contact_id}. Omitiendo paso.");
+        $this->line('Buscando tareas manuales para generar anticipadamente...');
+
+        $enrollments = ContactSequenceEnrollment::where('status', 'active')
+            ->whereNotNull('next_step_due_at')
+            ->whereBetween('next_step_due_at', [now(), now()->addDay()])
+            ->with('contact.owner', 'sequence.steps')
+            ->get();
+            
+        if ($enrollments->isEmpty()) {
+            $this->line('-> No hay tareas manuales para pre-generar.');
             return;
         }
 
-        switch ($step->action_type) {
-            case 'send_email_template':
-                $template = EmailTemplate::find($step->parameters['template_id']);
-                if (!$template) {
-                    $this->error("-> Plantilla #{$step->parameters['template_id']} no encontrada. Omitiendo paso.");
-                    break;
-                }
+        $this->info("-> Se encontraron {$enrollments->count()} tareas manuales para pre-generar.");
 
-                $owner = $contact->owner;
-                
-                // ✅ 2. Lógica de reemplazo mejorada usando arrays
-                $placeholders = [
-                    '[CONTACT_FIRST_NAME]',
-                    '[CONTACT_LAST_NAME]',
-                    '[CONTACT_EMAIL]',
-                    '[OWNER_NAME]',
-                ];
-                $replacements = [
-                    $contact->first_name,
-                    $contact->last_name,
-                    $contact->email,
-                    $contact->owner->name ?? '', // Accedemos al propietario a través del contacto
-                ];
+        foreach ($enrollments as $enrollment) {
+            $nextStep = $enrollment->sequence->steps->where('order', $enrollment->current_step)->first();
+            $this->info("   - Procesando Contacto #{$enrollment->contact_id} para el paso #{$enrollment->current_step} (vencimiento: {$enrollment->next_step_due_at})");
 
-                $finalBody = str_replace($placeholders, $replacements, $template->body);
-                $finalSubject = str_replace($placeholders, $replacements, $template->subject);
-                
-                Mail::to($contact->email)->send(new SequenceEmail($finalSubject, $finalBody, $owner));
-                $this->info("-> Email enviado a {$contact->email} usando plantilla '{$template->name}'");
-                break;
-
-            case 'create_manual_task':
-                Task::create([
-                    'contact_id' => $contact->id,
-                    'description' => $step->parameters['description'],
-                    'action_type' => $step->parameters['task_type'],
-                    'owner_id' => $contact->owner_id, // Usamos el owner_id del contacto
-                    'status' => 'pendiente',
-                    'schedule_date' => now(),
-                ]);
-                $this->info("-> Tarea manual '{$step->parameters['description']}' creada para el contacto.");
-                break;
+            // Solo nos interesan las tareas manuales en esta fase
+            if ($nextStep && $nextStep->action_type === 'create_manual_task') {
+                $this->createManualTask($enrollment, $nextStep);
+                $this->advanceSequence($enrollment, $nextStep); // Avanzamos la secuencia
+            }
         }
+    }
+
+    /**
+     * Ejecuta los pasos (como enviar correos) que ya están vencidos.
+     */
+    private function executeDueSteps()
+    {
+        $this->line('Buscando pasos vencidos para ejecutar ahora...');
+
+        $enrollments = ContactSequenceEnrollment::where('status', 'active')
+            ->where('next_step_due_at', '<=', now())
+            ->with('contact.owner', 'sequence.steps')
+            ->get();
+        
+        if ($enrollments->isEmpty()) {
+            $this->line('-> No hay pasos inmediatos para ejecutar.');
+            return;
+        }
+
+        $this->info("-> Se encontraron {$enrollments->count()} pasos inmediatos para ejecutar.");
+
+        foreach ($enrollments as $enrollment) {
+            $nextStep = $enrollment->sequence->steps->where('order', $enrollment->current_step)->first();
+
+            if (!$nextStep) {
+                $enrollment->update(['status' => 'completed', 'next_step_due_at' => null]);
+                $this->info("   - Secuencia completada para el contacto #{$enrollment->contact_id}.");
+                continue;
+            }
+            
+            // Aquí solo ejecutamos acciones que no sean de creación de tareas manuales,
+            // ya que esas se adelantan.
+            if ($nextStep->action_type === 'send_email_template') {
+                $this->sendSequenceEmail($enrollment, $nextStep);
+            }
+            // NOTA: Podríamos añadir un log o manejar el caso de una tarea manual que se "atrasó"
+            // y no fue pre-generada, pero por ahora la lógica principal la cubre.
+            
+            $this->advanceSequence($enrollment, $nextStep);
+        }
+    }
+    
+    /**
+     * Lógica para crear la tarea manual.
+     */
+    private function createManualTask($enrollment, $step)
+    {
+        $dueDate = Carbon::parse($enrollment->next_step_due_at);
+
+        Task::create([
+            'contact_id'    => $enrollment->contact_id,
+            'description'   => $step->parameters['description'],
+            'action_type'   => $step->parameters['task_type'],
+            'owner_id'      => $enrollment->contact->owner_id,
+            'status'        => 'pendiente',
+            'created_by'    => null, // Tarea creada por el sistema
+            'schedule_date' => $dueDate,
+            'remember_date' => $dueDate->copy()->subMinutes(15), // Recordatorio 15 mins antes
+        ]);
+        $this->info("   - Tarea '{$step->parameters['description']}' creada para Contacto #{$enrollment->contact_id}. Vence: " . $dueDate->toDateTimeString());
+    }
+
+    /**
+     * Lógica para enviar el correo de la secuencia.
+     */
+    private function sendSequenceEmail($enrollment, $step)
+    {
+        $contact = $enrollment->contact;
+        $template = EmailTemplate::find($step->parameters['template_id']);
+        if (!$template) {
+            $this->error("   - Plantilla #{$step->parameters['template_id']} no encontrada. Omitiendo paso.");
+            return;
+        }
+
+        $owner = $contact->owner;
+        $placeholders = ['[CONTACT_FIRST_NAME]', '[CONTACT_LAST_NAME]', '[CONTACT_EMAIL]', '[OWNER_NAME]'];
+        $replacements = [$contact->first_name, $contact->last_name, $contact->email, $owner->name ?? ''];
+
+        $finalBody = str_replace($placeholders, $replacements, $template->body);
+        $finalSubject = str_replace($placeholders, $replacements, $template->subject);
+        
+        Mail::to($contact->email)->send(new SequenceEmail($finalSubject, $finalBody, $owner));
+        
+        $senderEmail = $owner->email ?? config('mail.from.address');
+        $this->info("   - Email enviado a {$contact->email} desde {$senderEmail}");
+    }
+
+    /**
+     * Actualiza la inscripción al siguiente paso.
+     */
+    private function advanceSequence($enrollment, $currentStep)
+    {
+        $stepAfter = $enrollment->sequence->steps->where('order', $currentStep->order + 1)->first();
+        
+        $nextDueDate = null;
+        if ($stepAfter) {
+            // La fecha del siguiente paso siempre se calcula desde la inscripción original.
+            $nextDueDate = Carbon::parse($enrollment->enrolled_at)
+                ->add($stepAfter->delay_unit, $stepAfter->delay_amount);
+        }
+
+        $enrollment->update([
+            'current_step'     => $currentStep->order + 1,
+            'next_step_due_at' => $nextDueDate,
+            'status'           => $stepAfter ? 'active' : 'completed',
+        ]);
     }
 }

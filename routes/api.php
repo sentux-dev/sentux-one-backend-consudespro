@@ -56,6 +56,8 @@ use App\Http\Controllers\Api\Settings\IntegrationController;
 use App\Http\Controllers\Api\Settings\PermissionController;
 use App\Http\Controllers\Api\Settings\PermissionRuleController;
 use App\Http\Controllers\Api\Settings\RoleController;
+use App\Http\Controllers\Api\User\Profile\ThemePreferencesController;
+use App\Http\Controllers\Api\NotificationController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -72,6 +74,11 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/mark-as-read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/{notification}/mark-as-read', [NotificationController::class, 'markOneAsRead']);
+
 
     // User routes
     Route::prefix('user')->group(function () {
@@ -97,6 +104,9 @@ Route::middleware('auth:sanctum')->group(function () {
                 Route::post('app/verify', [MfaController::class, 'verifyTOTP']);
                 Route::delete('deactivate', [MfaController::class, 'deactivateMFA']);
             });
+
+            Route::get('theme-preferences', [ThemePreferencesController::class, 'show']);
+            Route::put('theme-preferences', [ThemePreferencesController::class, 'update']);
         });
         // Sesiones activas
         Route::get('sessions', [SessionController::class, 'index']);

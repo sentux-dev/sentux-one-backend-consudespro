@@ -190,6 +190,9 @@ class TaskController extends Controller
             'updated_by' => Auth::id()
         ]));
 
+        // Cargar relaciones necesarias
+        $task->load(['activity', 'createdBy', 'owner']);
+
         return response()->json([
             'message' => 'Tarea actualizada exitosamente',
             'data' => $task
