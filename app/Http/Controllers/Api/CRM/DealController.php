@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\CRM;
 use App\Http\Controllers\Controller;
 use App\Models\Crm\Contact;
 use App\Models\Crm\Deal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\Crm\DealCustomFieldValue;
 
 class DealController extends Controller
 {
@@ -19,6 +21,10 @@ class DealController extends Controller
 
         if ($request->filled('pipeline_id')) {
             $query->where('pipeline_id', $request->pipeline_id);
+        }
+
+        if ($request->filled('stage_id')) {
+            $query->where('stage_id', $request->stage_id);
         }
 
         if ($request->filled('owner_id')) {
@@ -39,6 +45,17 @@ class DealController extends Controller
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%");
         }
+
+        foreach ($request->all() as $key => $value) {
+            if (str_starts_with($key, 'cf_') && !empty($value)) {
+                $customFieldName = substr($key, 3); // Quita el prefijo 'cf_'
+                $query->whereHas('customFieldValues', function (Builder $q) use ($customFieldName, $value) {
+                    $q->where('value', $value)
+                      ->whereHas('field', fn(Builder $sq) => $sq->where('name', $customFieldName));
+                });
+            }
+        }
+
 
         $deals = $query->get();
 
@@ -65,6 +82,7 @@ class DealController extends Controller
             // 🔹 Aceptamos un array de contact_ids
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'integer|exists:crm_contacts,id',
+            'custom_field_values' => 'nullable|array'
         ]);
 
         $deal = null;
@@ -74,6 +92,19 @@ class DealController extends Controller
             $dealData['owner_id'] = Auth::id();
 
             $deal = Deal::create($dealData);
+
+            // ✅ Lógica para guardar campos personalizados
+            if (!empty($validatedData['custom_field_values'])) {
+                foreach ($validatedData['custom_field_values'] as $field) {
+                    if (isset($field['value']) && $field['value'] !== null) {
+                        DealCustomFieldValue::create([
+                            'deal_id' => $deal->id,
+                            'custom_field_id' => $field['id'],
+                            'value' => $field['value']
+                        ]);
+                    }
+                }
+            }
 
             if (!empty($validatedData['contact_ids'])) {
                 foreach ($validatedData['contact_ids'] as $contactId) {
@@ -108,11 +139,24 @@ class DealController extends Controller
             // 🔹 Aceptamos un array de contact_ids
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'integer|exists:crm_contacts,id',
+            'custom_field_values' => 'nullable|array'
         ]);
 
         DB::beginTransaction();
         try {
             $deal->update($request->except('contact_ids'));
+
+            if (isset($validatedData['custom_field_values'])) {
+                foreach ($validatedData['custom_field_values'] as $field) {
+                    DealCustomFieldValue::updateOrCreate(
+                        [
+                            'deal_id' => $deal->id,
+                            'custom_field_id' => $field['id'],
+                        ],
+                        ['value' => $field['value'] ?? null]
+                    );
+                }
+            }
 
             // 🔹 Lógica de Sincronización
             if (isset($validatedData['contact_ids'])) {
@@ -146,6 +190,27 @@ class DealController extends Controller
             Log::error('Error updating deal', ['deal_id' => $deal->id, 'error' => $e->getMessage()]);
             return response()->json(['message' => 'Error al actualizar el negocio'], 500);
         }
+    }
+    
+
+    public function getAssociationStatus(Deal $deal, int $contactId)
+    {
+        // Contamos el total de asociaciones que tiene el negocio, sin importar el tipo.
+        $totalAssociations = $deal->dealAssociations()->count();
+
+        // Verificamos que el contacto que se quiere eliminar realmente esté asociado.
+        $isAssociated = $deal->dealAssociations()
+                             ->where('associable_type', \App\Models\Crm\Contact::class)
+                             ->where('associable_id', $contactId)
+                             ->exists();
+        
+        // El negocio quedará huérfano si solo tiene 1 asociación en total,
+        // y es precisamente la que estamos a punto de eliminar.
+        $willBeOrphaned = ($totalAssociations === 1 && $isAssociated);
+
+        return response()->json([
+            'will_be_orphaned' => $willBeOrphaned
+        ]);
     }
 
 }

@@ -58,35 +58,31 @@ class TaskController extends Controller
         }
 
        // ✅ Ordenamiento dinámico
-        if ($request->filled('sort_field')) {
+         if ($request->filled('sort_field')) {
             $direction = $request->get('sort_order', 'asc') == -1 ? 'desc' : 'asc';
+            $sortField = $request->sort_field;
 
-            switch ($request->sort_field) {
-                case 'contact.name':
-                    $query->leftJoin('crm_contacts', 'crm_tasks.contact_id', '=', 'crm_contacts.id')
-                        ->select('crm_tasks.*') // ✅ Evita problemas con columnas duplicadas
-                        ->orderBy('crm_contacts.first_name', $direction)
-                        ->orderBy('crm_contacts.last_name', $direction);
-                    break;
-
-                case 'owner.name':
-                    $query->join('users as owners', 'crm_tasks.owner_id', '=', 'owners.id')
-                        ->orderBy('owners.first_name', $direction)
-                        ->orderBy('owners.last_name', $direction);
-                    break;
-
-                case 'created_by.name':
-                    $query->join('users as creators', 'crm_tasks.created_by', '=', 'creators.id')
-                        ->orderBy('creators.first_name', $direction)
-                        ->orderBy('creators.last_name', $direction);
-                    break;
-
-                default:
-                    $query->orderBy("crm_tasks." . $request->sort_field, $direction);
+            // Para campos de tablas relacionadas, hacemos un join seguro
+            if ($sortField === 'contact.name') {
+                $query->join('crm_contacts', 'crm_tasks.contact_id', '=', 'crm_contacts.id')
+                      ->select('crm_tasks.*') // Es crucial seleccionar explícitamente las columnas de la tabla principal
+                      ->orderBy('crm_contacts.first_name', $direction)
+                      ->orderBy('crm_contacts.last_name', $direction);
+            } elseif ($sortField === 'owner.name') {
+                $query->join('users as owners', 'crm_tasks.owner_id', '=', 'owners.id')
+                      ->select('crm_tasks.*')
+                      ->orderBy('owners.name', $direction);
+            } elseif ($sortField === 'created_by.name') {
+                 $query->join('users as creators', 'crm_tasks.created_by', '=', 'creators.id')
+                       ->select('crm_tasks.*')
+                       ->orderBy('creators.name', $direction);
+            } else {
+                // Para campos de la tabla principal, el ordenamiento es directo
+                $query->orderBy($sortField, $direction);
             }
         } else {
-            // 🔹 IMPORTANTE: Especificar la tabla en el orderBy por defecto
-            $query->orderBy('crm_tasks.created_at', 'desc');
+            // Orden por defecto
+            $query->orderBy('created_at', 'desc');
         }
 
         // ✅ Paginación con metadatos completos (estándar de Laravel)
@@ -130,11 +126,8 @@ class TaskController extends Controller
         }
 
         // ✅ Filtro por rango de fechas (schedule_date)
-        if ($request->filled('startDate') && $request->filled('endDate')) {
-            $query->whereBetween('schedule_date', [
-                $request->startDate,
-                $request->endDate
-            ]);
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('schedule_date', [$request->start_date, $request->end_date]);
         }
 
         // ✅ Ordenar por más recientes
@@ -196,6 +189,9 @@ class TaskController extends Controller
         $task->update(array_merge($validated, [
             'updated_by' => Auth::id()
         ]));
+
+        // Cargar relaciones necesarias
+        $task->load(['activity', 'createdBy', 'owner']);
 
         return response()->json([
             'message' => 'Tarea actualizada exitosamente',

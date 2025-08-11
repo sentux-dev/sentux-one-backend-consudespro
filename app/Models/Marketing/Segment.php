@@ -31,6 +31,7 @@ class Segment extends Model
                 continue; // Omitir filtros vacíos
             }
 
+            // --- Lógica para Campos Nativos ---
             switch ($key) {
                 case 'status_id':
                     $query->where('contact_status_id', $value);
@@ -51,7 +52,17 @@ class Segment extends Model
                           ->orWhere('email', 'like', "%{$value}%");
                     });
                     break;
-                // Puedes añadir más casos para otros filtros que tengas
+            }
+
+            // --- Lógica para Campos Personalizados ---
+            // Buscamos filtros que sigan el patrón "cf_{nombre_del_campo}"
+            if (str_starts_with($key, 'cf_')) {
+                $customFieldName = substr($key, 3); // Elimina el prefijo "cf_"
+                
+                $query->whereHas('customFieldValues', function ($q) use ($customFieldName, $value) {
+                    $q->where('value', $value)
+                      ->whereHas('field', fn($qf) => $qf->where('name', $customFieldName));
+                });
             }
         }
 

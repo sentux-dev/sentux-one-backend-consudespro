@@ -100,13 +100,12 @@ class CampaignController extends Controller
 
     public function send(Campaign $campaign)
     {
-        $campaign->load(['segments.contacts', 'mailingLists.contacts']);
+        $campaign->load(['segments', 'mailingLists']);
 
         $allContacts = collect();
 
         // Recolectar contactos de todos los segmentos asociados
         foreach ($campaign->segments as $segment) {
-            // Usamos el método que ya construimos para obtener los contactos del segmento
             $contactsFromSegment = $segment->getContactsQuery()->get();
             $allContacts = $allContacts->merge($contactsFromSegment);
         }
@@ -123,9 +122,28 @@ class CampaignController extends Controller
             return response()->json(['message' => 'No se encontraron destinatarios en las audiencias seleccionadas.'], 422);
         }
 
-        // Dividir en lotes y despachar los jobs
+        // 🔹 --- LÓGICA PARA EVITAR REENVÍOS --- 🔹
+        
+        // 1. Obtener los IDs de todos los contactos únicos.
+        $contactIds = $uniqueContacts->pluck('id');
+
+        // 2. Consultar la tabla de logs para ver cuáles de estos contactos YA han recibido esta campaña.
+        $sentContactIds = $campaign->emailLogs()
+            ->whereIn('contact_id', $contactIds)
+            ->pluck('contact_id');
+
+        // 3. Filtrar la colección de contactos para quedarnos solo con los que NO han recibido el correo.
+        $contactsToSend = $uniqueContacts->whereNotIn('id', $sentContactIds);
+        
+        // --- FIN DE LA LÓGICA ---
+
+        if ($contactsToSend->isEmpty()) {
+            return response()->json(['message' => 'Todos los contactos de la audiencia seleccionada ya han recibido esta campaña.'], 422);
+        }
+
+        // Dividir en lotes y despachar los jobs solo para los contactos que faltan
         $batchSize = config('services.mail_batch_size', 100);
-        $contactChunks = $uniqueContacts->chunk($batchSize);
+        $contactChunks = $contactsToSend->chunk($batchSize);
 
         foreach ($contactChunks as $chunk) {
             SendCampaignJob::dispatch($campaign, $chunk);
@@ -133,7 +151,7 @@ class CampaignController extends Controller
 
         $campaign->update(['status' => 'enviando', 'sent_at' => now()]);
 
-        return response()->json(['message' => 'La campaña ha sido encolada para su envío a ' . $uniqueContacts->count() . ' contactos.']);
+        return response()->json(['message' => 'La campaña ha sido encolada para su envío a ' . $contactsToSend->count() . ' nuevos contactos.']);
     }
 
     public function sendTest(Request $request, Campaign $campaign)

@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str; 
 
 class Contact extends Model
@@ -65,6 +67,11 @@ class Contact extends Model
         return $this->belongsTo(ContactStatus::class, 'contact_status_id');
     }
 
+    public function companies()
+    {
+        return $this->belongsToMany(Company::class, 'crm_company_contact', 'contact_id', 'company_id');
+    }
+
     public function disqualificationReason()
     {
         return $this->belongsTo(DisqualificationReason::class, 'disqualification_reason_id');
@@ -80,10 +87,15 @@ class Contact extends Model
         return $this->hasMany(ContactCustomField::class, 'contact_id');
     }
 
-    public function deals()
+    public function deals(): MorphToMany
     {
-        return $this->belongsToMany(Deal::class, 'crm_contact_crm_deal', 'crm_contact_id', 'crm_deal_id')
-            ->withTimestamps();
+        return $this->morphToMany(
+            Deal::class,                // El modelo final al que nos conectamos
+            'associable',               // El prefijo usado en la tabla polimórfica
+            'crm_deal_associations',    // El nombre de la tabla de asociaciones
+            'associable_id',            // La columna para el ID de este modelo (Contact)
+            'deal_id'                   // La columna para el ID del otro modelo (Deal)
+        )->withTimestamps()->withPivot('relation_type'); // Incluir campos extra de la tabla pivote
     }
 
     public function projects()
@@ -92,18 +104,23 @@ class Contact extends Model
             ->withTimestamps();
     }
 
+    public function entryHistory()
+    {
+        return $this->hasMany(ContactEntryHistory::class);
+    }
+
     public function campaigns()
     {
-        return $this->belongsToMany(Campaign::class, 'crm_campaign_crm_contact', 'crm_contact_id', 'crm_campaign_id')
-            ->withPivot('is_original', 'is_last')
-            ->withTimestamps();
+        return $this->belongsToMany(Campaign::class, 'crm_contact_entry_history', 'contact_id', 'campaign_id')
+                    ->withPivot('entry_at', 'is_original', 'is_last')
+                    ->withTimestamps();
     }
 
     public function origins()
     {
-        return $this->belongsToMany(Origin::class, 'crm_origin_crm_contact', 'crm_contact_id', 'crm_origin_id')
-            ->withPivot('is_original', 'is_last')
-            ->withTimestamps();
+        return $this->belongsToMany(Origin::class, 'crm_contact_entry_history', 'contact_id', 'origin_id')
+                    ->withPivot('entry_at', 'is_original', 'is_last')
+                    ->withTimestamps();
     }
 
     public function activities()
@@ -187,6 +204,11 @@ class Contact extends Model
                 }
             }
         });
+    }
+
+    public function sequenceEnrollments(): HasMany
+    {
+        return $this->hasMany(ContactSequenceEnrollment::class);
     }
     
 }

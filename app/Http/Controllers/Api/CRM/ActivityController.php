@@ -8,6 +8,8 @@ use App\Models\Crm\Task;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\MeetingInvitationEmail;
 
 class ActivityController extends Controller
 {
@@ -45,7 +47,10 @@ class ActivityController extends Controller
             'task_action_type' => 'nullable|string|max:50',
             'schedule_date' => 'nullable|date',
             'remember_date' => 'nullable|date',
-            'meeting_title' => 'nullable|string|max:255'
+            'meeting_title' => 'nullable|string|max:255',
+            'send_invitation' => 'nullable|boolean',
+            'external_guests' => 'nullable|array',
+            'external_guests.*' => 'email',
         ]);
 
         // Asignar el usuario autenticado como creador de la actividad
@@ -53,6 +58,33 @@ class ActivityController extends Controller
         $validated['updated_by'] = Auth::id(); // También asignamos el actualizador
 
         $activity = Activity::create($validated);
+        $activity->load('contact.owner'); // Cargar relaciones necesarias
+
+        // ✅ --- LÓGICA PARA ENVIAR INVITACIÓN ---
+        if ($activity->type === 'reunion' && $activity->send_invitation) {
+            $contact = $activity->contact;
+            $owner = $contact->owner;
+
+            // ✅ 2. Construir la lista de todos los destinatarios
+            $recipients = [];
+            if ($contact && $contact->email) {
+                $recipients[] = $contact->email;
+            }
+            if ($owner && $owner->email) {
+                $recipients[] = $owner->email;
+            }
+            if (!empty($validated['external_guests'])) {
+                $recipients = array_merge($recipients, $validated['external_guests']);
+            }
+            
+            // Eliminar duplicados, por si acaso
+            $uniqueRecipients = array_unique($recipients);
+
+            // ✅ 3. Enviar el correo a toda la lista de destinatarios
+            if (!empty($uniqueRecipients)) {
+                Mail::to($uniqueRecipients)->send(new MeetingInvitationEmail($activity));
+            }
+        }
 
         // ✅ Si es una tarea, crear el registro en crm_tasks
         if ($activity->type === 'tarea') {

@@ -10,6 +10,8 @@ use App\Models\Marketing\Campaign;
 use App\Models\Crm\Contact;
 use App\Services\Email\EmailProviderManager;
 use Illuminate\Support\Collection;
+use App\Services\Validation\InternalEmailValidatorService;
+
 
 class SendCampaignJob implements ShouldQueue
 {
@@ -17,9 +19,25 @@ class SendCampaignJob implements ShouldQueue
     
     public function __construct(public Campaign $campaign, public Collection $contacts, public bool $isTest = false) {}
 
-    public function handle(EmailProviderManager $emailManager): void
+    public function handle(EmailProviderManager $emailManager, InternalEmailValidatorService $validator): void
     {
         foreach ($this->contacts as $contact) {
+
+             if (empty($contact->email)) {
+                continue;
+            }
+
+            $validationStatus = $validator->validate($contact->email);
+            
+            if ($validationStatus !== 'valid') {
+                $this->campaign->emailLogs()->create([
+                    'contact_id' => $contact->id,
+                    'status' => 'fallido',
+                    'error_message' => "Correo inválido (motivo: {$validationStatus}). Envío cancelado.",
+                ]);
+                continue; // Saltamos al siguiente contacto
+            }
+
             $htmlContent = null;
             $metadata = [];
             $variables = $this->prepareAllVariables($contact);

@@ -36,8 +36,7 @@ class Company extends Model
 
     public function contacts()
     {
-        return $this->belongsToMany(Contact::class, 'crm_company_crm_contact', 'company_id', 'contact_id')
-                    ->withTimestamps();
+        return $this->belongsToMany(Contact::class, 'crm_company_contact', 'company_id', 'contact_id');
     }
 
     public function deals()
