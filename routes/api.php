@@ -26,6 +26,8 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\DealLookupController;
 use App\Http\Controllers\Api\CRM\DisqualificationReasonController;
 use App\Http\Controllers\Api\CRM\EmailTemplateController;
+use App\Http\Controllers\Api\CRM\FacebookIntegrationController;
+use App\Http\Controllers\Api\CRM\FacebookWebhookController;
 use App\Http\Controllers\Api\CRM\LeadActionController;
 use App\Http\Controllers\Api\CRM\LeadController;
 use App\Http\Controllers\Api\CRM\LeadImportController;
@@ -70,6 +72,9 @@ Route::post('/auth/verify-app-login', [AuthController::class, 'verifyAppLoginCod
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
 Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name('password.update');
 
+Route::get('/facebook/webhook', [FacebookWebhookController::class, 'verify']);
+Route::post('/facebook/webhook', [FacebookWebhookController::class, 'handle']);
+
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -78,6 +83,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/mark-as-read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/{notification}/mark-as-read', [NotificationController::class, 'markOneAsRead']);
+
+    Route::get('/facebook/auth-url', [FacebookIntegrationController::class, 'getAuthUrl']);
+    Route::get('/facebook/pages', [FacebookIntegrationController::class, 'getPages']);
+    Route::post('/facebook/subscribe-page', [FacebookIntegrationController::class, 'subscribePage']);
 
 
     // User routes
