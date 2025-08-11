@@ -104,18 +104,23 @@ class Contact extends Model
             ->withTimestamps();
     }
 
+    public function entryHistory()
+    {
+        return $this->hasMany(ContactEntryHistory::class);
+    }
+
     public function campaigns()
     {
-        return $this->belongsToMany(Campaign::class, 'crm_campaign_crm_contact', 'crm_contact_id', 'crm_campaign_id')
-            ->withPivot('is_original', 'is_last')
-            ->withTimestamps();
+        return $this->belongsToMany(Campaign::class, 'crm_contact_entry_history', 'contact_id', 'campaign_id')
+                    ->withPivot('entry_at', 'is_original', 'is_last')
+                    ->withTimestamps();
     }
 
     public function origins()
     {
-        return $this->belongsToMany(Origin::class, 'crm_origin_crm_contact', 'crm_contact_id', 'crm_origin_id')
-            ->withPivot('is_original', 'is_last')
-            ->withTimestamps();
+        return $this->belongsToMany(Origin::class, 'crm_contact_entry_history', 'contact_id', 'origin_id')
+                    ->withPivot('entry_at', 'is_original', 'is_last')
+                    ->withTimestamps();
     }
 
     public function activities()

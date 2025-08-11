@@ -19,6 +19,7 @@ class Activity extends Model
         'schedule_date',
         'remember_date',
         'meeting_title',
+        'send_invitation',
         'created_by', // ID del usuario que creó la actividad
         'updated_by', // ID del usuario que actualizó la actividad
     ];
@@ -27,6 +28,7 @@ class Activity extends Model
         'schedule_date' => 'datetime',
         'remember_date' => 'datetime',
         'created_at' => 'datetime',
+        'send_invitation' => 'boolean',
     ];
 
     // cuando consulten enviar un campo adicional date con la fecha de created_at y created_by_name

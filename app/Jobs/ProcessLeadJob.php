@@ -217,8 +217,13 @@ class ProcessLeadJob implements ShouldQueue
         }
 
         $logMessage = ''; // Inicializamos la variable
+        $contactExists = false;
 
         if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
+            $existingContact = Contact::where('email', $email)->first();
+            $contactExists = (bool)$existingContact;
+
             $this->contact = Contact::firstOrCreate(
                 ['email' => $email],
                 [
@@ -231,6 +236,10 @@ class ProcessLeadJob implements ShouldQueue
             $logMessage = "Contacto creado/encontrado por email con ID: {$this->contact->id}";
         }
         elseif (!empty($phone)) {
+
+            $existingContact = Contact::where('phone', $phone)->first();
+            $contactExists = (bool)$existingContact;
+            
             $this->contact = Contact::firstOrCreate(
                 ['phone' => $phone],
                 [
@@ -244,19 +253,27 @@ class ProcessLeadJob implements ShouldQueue
         }
         
         if ($this->contact) {
-            // ✅ --- NUEVA LÓGICA PARA REGISTRAR EL HISTORIAL DE INGRESO ---
-            // Este bloque se ejecuta cada vez que el job procesa un lead y lo asocia a un contacto.
+            // --- LÓGICA DE HISTORIAL CORREGIDA ---
+            // 1. Si es un reingreso, desmarcamos la entrada anterior como 'is_last'
+            if ($contactExists) {
+                ContactEntryHistory::where('contact_id', $this->contact->id)
+                    ->where('is_last', true)
+                    ->update(['is_last' => false]);
+            }
+            
+            // 2. Creamos la nueva entrada del historial
             ContactEntryHistory::create([
                 'contact_id'       => $this->contact->id,
                 'entry_at'         => now(),
-                // Nota: Asumimos que el origin_id y campaign_id se guardan en el payload.
-                // Si los tienes directamente en el modelo ExternalLead, puedes usar: $this->lead->origin_id
                 'origin_id'        => data_get($payload, '_meta.origin_id'),
                 'campaign_id'      => data_get($payload, '_meta.campaign_id'),
                 'external_lead_id' => $this->lead->id,
-                'details'          => $payload // Guardamos el payload completo como referencia
+                'details'          => $payload,
+                // Si el contacto fue recién creado, es la original. Siempre es la última.
+                'is_original'      => $this->contact->wasRecentlyCreated,
+                'is_last'          => true,
             ]);
-            // --- FIN DE LA NUEVA LÓGICA ---
+            // --- FIN DE LA LÓGICA ---
 
             $this->saveCustomFields($this->lead->payload);
             $this->logAction('ACTION_EXECUTED', $logMessage);

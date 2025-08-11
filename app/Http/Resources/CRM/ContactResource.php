@@ -79,6 +79,10 @@ class ContactResource extends JsonResource
 
             // ✅ Fechas
             'created_at' => $this->created_at ? $this->created_at->toISOString() : null,
+            'last_entry_at' => $this->when(isset($this->last_entry_at), function() {
+                // Carbon parse para asegurar que sea un objeto Carbon y poder formatearlo
+                return \Carbon\Carbon::parse($this->last_entry_at)->toISOString();
+            }),
 
             // Newsletter subscription
             'subscribed_to_newsletter' => $this->subscribed_to_newsletter,

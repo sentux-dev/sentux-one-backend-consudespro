@@ -8,6 +8,7 @@ use App\Http\Resources\CRM\ContactResource;
 use Illuminate\Http\Request;
 use App\Models\Crm\Contact;
 use App\Models\Crm\Campaign;
+use App\Models\Crm\ContactEntryHistory;
 use App\Models\Crm\ContactSequenceEnrollment;
 use App\Models\Crm\Origin;
 use App\Models\Crm\Deal;
@@ -21,6 +22,8 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Log as FacadesLog;
 
 class ContactController extends Controller
 {
@@ -36,11 +39,26 @@ class ContactController extends Controller
 
         $query = (new ContactPolicy)->scopeContact(Contact::query(), $user);
 
+        // --- 1. Subconsulta para obtener la fecha del último ingreso de cada contacto ---
+        $latestEntrySubquery = DB::table('crm_contact_entry_history')
+            ->select('contact_id', DB::raw('MAX(entry_at) as last_entry_at'))
+            ->groupBy('contact_id');
+
+        // --- 2. Unimos la subconsulta a la consulta principal de contactos ---
+        $query->leftJoinSub($latestEntrySubquery, 'latest_entry', function ($join) {
+            $join->on('crm_contacts.id', '=', 'latest_entry.contact_id');
+        });
+        
+        // --- 3. Seleccionamos todas las columnas de contacto más nuestro nuevo campo ---
+        $query->select('crm_contacts.*', 'latest_entry.last_entry_at');
+
+        // La carga de relaciones (with) se mantiene igual
         $query->with([
             'status', 'disqualificationReason', 'owner', 'deals:id,name',
             'campaigns:id,name', 'origins:id,name', 'projects:id,name'
         ])->withCount(['deals', 'projects', 'campaigns', 'origins']);
 
+        // --- El resto de los filtros se mantienen exactamente igual ---
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function (Builder $q) use ($search) {
@@ -56,8 +74,17 @@ class ContactController extends Controller
         if ($request->filled('loss_reason_id')) $query->where('disqualification_reason_id', $request->loss_reason_id);
         
         if ($request->filled('project_id')) $query->whereHas('projects', fn($q) => $q->where('real_state_projects.id', $request->project_id));
-        if ($request->filled('campaign_id')) $query->whereHas('campaigns', fn($q) => $q->where('crm_campaigns.id', $request->campaign_id));
-        if ($request->filled('origin_id')) $query->whereHas('origins', fn($q) => $q->where('crm_origins.id', $request->origin_id));
+        if ($request->filled('campaign_id')) {
+            $query->whereHas('campaigns', function ($q) use ($request) {
+                // Ya no es necesario especificar la tabla aquí, Eloquent lo sabe
+                $q->where('id', $request->campaign_id);
+            });
+        }
+        if ($request->filled('origin_id')) {
+            $query->whereHas('origins', function ($q) use ($request) {
+                $q->where('id', $request->origin_id);
+            });
+        }
 
         foreach ($request->all() as $key => $value) {
             if (str_starts_with($key, 'cf_') && !empty($value)) {
@@ -70,19 +97,27 @@ class ContactController extends Controller
         }
 
         if ($request->filled('start_date') && $request->filled('end_date')) {
-            $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
+            // Este filtro ahora puede ser más potente si lo ajustas para que también
+            // considere la fecha de último ingreso en lugar de solo created_at.
+            $query->whereBetween(DB::raw('COALESCE(latest_entry.last_entry_at, crm_contacts.created_at)'), [$request->start_date, $request->end_date]);
         }
-
+        
+        // --- 4. Lógica de Ordenamiento Corregida ---
         $sortField = $request->get('sort_field', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
         
-        if ($sortField === 'full_name') {
+        if ($sortField === 'created_at') {
+            // ¡LA CLAVE! Ordenamos por la fecha de último ingreso. Si es nula, usamos la de creación.
+            $query->orderBy(DB::raw('COALESCE(latest_entry.last_entry_at, crm_contacts.created_at)'), $sortOrder);
+        } elseif ($sortField === 'full_name') {
             $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
         } else {
-            $query->orderBy($sortField, $sortOrder);
+            // Para otros campos, el ordenamiento es directo sobre la tabla de contactos
+            $query->orderBy('crm_contacts.' . $sortField, $sortOrder);
         }
 
         $contacts = $query->paginate($request->get('per_page', 10));
+        
         return new ContactCollection($contacts);
     }
 
@@ -132,18 +167,14 @@ class ContactController extends Controller
                 $contact->projects()->attach($validated['projects']);
             }
 
-            // ✅ --- LÓGICA DE CAMPAÑA SIMPLIFICADA ---
+            // Lógica para la primera campaña y origen (historial)
             if (!empty($validated['campaign_id'])) {
-                // Al ser la primera, es tanto la original como la última.
                 $contact->campaigns()->attach($validated['campaign_id'], [
                     'is_original' => true,
                     'is_last' => true
                 ]);
             }
-
-            // ✅ --- LÓGICA DE ORIGEN SIMPLIFICADA ---
             if (!empty($validated['origin_id'])) {
-                // Al ser el primero, es tanto el original como el último.
                 $contact->origins()->attach($validated['origin_id'], [
                     'is_original' => true,
                     'is_last' => true
@@ -154,7 +185,7 @@ class ContactController extends Controller
 
             return response()->json([
                 'message' => 'Contacto creado correctamente',
-                'contact' => $contact->load(['status', 'owner', 'projects', 'campaigns', 'origins'])
+                'contact' => new ContactResource($contact) // ✅ ¡Esta es la corrección clave!
             ], 201);
 
         } catch (\Exception $e) {
@@ -296,19 +327,33 @@ class ContactController extends Controller
             return response()->json(['message' => 'Tipo de asociación no válido.'], 400);
         }
 
-        $history = $contact->{$type}()
-            ->withPivot('created_at', 'is_original', 'is_last')
-            ->orderBy('pivot_created_at', 'asc')
-            ->get();
+        // ✅ Construimos la consulta sobre la tabla de historial correcta
+        $query = ContactEntryHistory::where('contact_id', $contact->id)
+            ->orderBy('entry_at', 'asc');
+
+        if ($type === 'campaigns') {
+            // Unimos con la tabla de campañas para obtener el nombre
+            $query->join('crm_campaigns', 'crm_contact_entry_history.campaign_id', '=', 'crm_campaigns.id')
+                ->whereNotNull('campaign_id')
+                ->select('crm_campaigns.name', 'crm_contact_entry_history.*');
+        } else { // origins
+            // Unimos con la tabla de orígenes para obtener el nombre
+            $query->join('crm_origins', 'crm_contact_entry_history.origin_id', '=', 'crm_origins.id')
+                ->whereNotNull('origin_id')
+                ->select('crm_origins.name', 'crm_contact_entry_history.*');
+        }
+        
+        $history = $query->get();
             
         $formattedHistory = $history->map(function ($item) {
             return [
                 'name' => $item->name,
-                'assigned_at' => $item->pivot->created_at->toDateTimeString(),
-                'is_original' => (bool)$item->pivot->is_original,
-                'is_last' => (bool)$item->pivot->is_last,
+                'assigned_at' => $item->entry_at->toDateTimeString(),
+                'is_original' => (bool)$item->is_original,
+                'is_last' => (bool)$item->is_last,
             ];
         });
+
         return response()->json($formattedHistory);
     }
     
