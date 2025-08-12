@@ -192,6 +192,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks', [TaskController::class, 'createTask']);
         Route::put('/tasks/{task}', [TaskController::class, 'updateTask']);
         Route::delete('/tasks/{task}', [TaskController::class, 'deleteTask']);
+        Route::patch('/tasks/{task}', [TaskController::class, 'updateTask']);
         // Custom Fields
         Route::apiResource('custom-fields', ContactCustomFieldController::class);
 
@@ -307,7 +308,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('settings')->group(function() {
     // ... (otras rutas de settings)
-        Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
+        Route::apiResource('integrations', IntegrationController::class)->except(['store']);
         Route::patch('/integrations/{integration}/name', [IntegrationController::class, 'updateName']);
         Route::apiResource('roles', RoleController::class);
         Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');

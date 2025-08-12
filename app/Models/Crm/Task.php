@@ -22,6 +22,11 @@ class Task extends Model
         'updated_by'
     ];
 
+    protected $casts = [
+        'schedule_date' => 'datetime',
+        'remember_date' => 'datetime',
+    ];
+
 
     public function activity()
     {
