@@ -74,6 +74,7 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name
 
 Route::get('/facebook/webhook', [FacebookWebhookController::class, 'verify']);
 Route::post('/facebook/webhook', [FacebookWebhookController::class, 'handle']);
+Route::get('/facebook/callback', [FacebookIntegrationController::class, 'handleCallback']);
 
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -86,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/facebook/auth-url', [FacebookIntegrationController::class, 'getAuthUrl']);
     Route::get('/facebook/pages', [FacebookIntegrationController::class, 'getPages']);
+    Route::get('/facebook/pages/{pageId}/forms', [FacebookIntegrationController::class, 'getFormsForPage']);
     Route::post('/facebook/subscribe-page', [FacebookIntegrationController::class, 'subscribePage']);
 
 
@@ -190,6 +192,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks', [TaskController::class, 'createTask']);
         Route::put('/tasks/{task}', [TaskController::class, 'updateTask']);
         Route::delete('/tasks/{task}', [TaskController::class, 'deleteTask']);
+        Route::patch('/tasks/{task}', [TaskController::class, 'updateTask']);
         // Custom Fields
         Route::apiResource('custom-fields', ContactCustomFieldController::class);
 
@@ -305,7 +308,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('settings')->group(function() {
     // ... (otras rutas de settings)
-        Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
+        Route::apiResource('integrations', IntegrationController::class)->except(['store']);
+        Route::patch('/integrations/{integration}/name', [IntegrationController::class, 'updateName']);
         Route::apiResource('roles', RoleController::class);
         Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();

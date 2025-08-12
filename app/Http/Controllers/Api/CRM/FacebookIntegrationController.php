@@ -67,11 +67,14 @@ class FacebookIntegrationController extends Controller
         $longLivedToken = $response->json()['access_token'];
 
         // 3. Guardar el token en la configuración de la integración
-        $integration = Integration::where('provider', 'facebook')->firstOrFail();
-        $credentials = $integration->credentials;
-        $credentials['user_access_token'] = $longLivedToken;
-        $integration->credentials = $credentials;
-        $integration->save();
+        if ($longLivedToken) {
+            Integration::create([
+                'provider' => 'facebook',
+                'name' => 'Nueva Conexión de Facebook - ' . now()->format('Y-m-d H:i'),
+                'credentials' => ['user_access_token' => $longLivedToken],
+                'is_active' => false // Se activa cuando el usuario suscribe una página
+            ]);
+        }
 
         return response()->view('auth.facebook-callback', ['success' => true]);
     }
@@ -83,16 +86,43 @@ class FacebookIntegrationController extends Controller
     {
         $integration = Integration::where('provider', 'facebook')->first();
         $token = $integration->credentials['user_access_token'] ?? null;
-
         if (!$token) {
             return response()->json(['message' => 'No se ha conectado una cuenta de Facebook.'], 400);
         }
 
         $response = Http::get("https://graph.facebook.com/me/accounts", [
             'access_token' => $token,
-            'fields' => 'id,name,access_token,tasks', // Pedimos el token de acceso de la página
+            'fields' => 'id,name,access_token',
         ]);
         
+        return response()->json($response->json()['data'] ?? []);
+    }
+
+    /**
+     * Obtiene los formularios de una página de Facebook.
+     */
+    public function getFormsForPage(Request $request, string $pageId)
+    {
+        $validated = $request->validate([
+            'page_access_token' => 'required|string',
+        ]);
+
+        $token = $validated['page_access_token'];
+
+        if (!$token) {
+            return response()->json(['message' => 'Token de página no proporcionado.'], 400);
+        }
+
+        $response = Http::get("https://graph.facebook.com/".config('services.facebook.graph_version')."/{$pageId}/leadgen_forms", [
+            'access_token' => $token,
+            'fields' => 'id,name',
+        ]);
+
+        if ($response->failed()) {
+            Log::error("Error al obtener formularios para la página {$pageId}", $response->json());
+            return response()->json(['message' => 'No se pudieron obtener los formularios de la página.'], 500);
+        }
+
         return response()->json($response->json()['data'] ?? []);
     }
 
@@ -102,31 +132,23 @@ class FacebookIntegrationController extends Controller
     public function subscribePage(Request $request)
     {
         $validated = $request->validate([
+            'integration_id' => 'required|exists:integrations,id',
             'page_id' => 'required|string',
             'page_access_token' => 'required|string',
+            'form_ids' => 'required|array',
+            'form_ids.*' => 'string',
         ]);
         
-        $pageId = $validated['page_id'];
-        $pageAccessToken = $validated['page_access_token'];
-
-        // Guardamos el token de la página para usarlo después
-        $integration = Integration::where('provider', 'facebook')->firstOrFail();
+        $integration = Integration::find($validated['integration_id']);
         $credentials = $integration->credentials;
-        $credentials['page_id'] = $pageId;
-        $credentials['page_access_token'] = $pageAccessToken;
+        $credentials['page_id'] = $validated['page_id'];
+        $credentials['page_access_token'] = $validated['page_access_token'];
+        $credentials['form_ids'] = $validated['form_ids'];
+        
         $integration->credentials = $credentials;
+        $integration->is_active = true;
         $integration->save();
         
-        // Suscribimos la página a los eventos de 'leadgen'
-        $response = Http::post("https://graph.facebook.com/{$pageId}/subscribed_apps", [
-            'subscribed_fields' => 'leadgen',
-            'access_token' => $pageAccessToken,
-        ]);
-        
-        if ($response->failed()) {
-            return response()->json(['message' => 'No se pudo suscribir la página.'], 500);
-        }
-
-        return response()->json(['message' => 'Página suscrita a los leads correctamente.']);
+        return response()->json(['message' => 'Página y formularios guardados. La sincronización se ejecutará cada 5 minutos.']);
     }
 }

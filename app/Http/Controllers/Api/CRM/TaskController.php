@@ -174,24 +174,39 @@ class TaskController extends Controller
     }
 
     /**
-     * ✅ Actualizar tarea (descripción, estado o recordatorios).
+     * ✅ Ver tarea específica (detalle).
+     * Usamos Route-Model Binding para encontrar la tarea automáticamente.
+     */
+    public function show(Task $task)
+    {
+
+        $task->load(['activity', 'createdBy', 'owner', 'contact']);
+        
+        return response()->json([
+            'data' => $task
+        ]);
+    }
+
+    /**
+     * ✅ Actualizar tarea (PATCH).
+     * Permite actualizar campos específicos de la tarea.
      */
     public function updateTask(Request $request, Task $task)
     {
         $validated = $request->validate([
-            'description' => 'nullable|string',
-            'status' => 'nullable|in:pendiente,completada,vencida',
-            'schedule_date' => 'nullable|date',
-            'remember_date' => 'nullable|date',
-            'action_type' => 'nullable|string'
+            'description'   => 'sometimes|nullable|string',
+            'status'        => 'sometimes|in:pendiente,completada,vencida',
+            'schedule_date' => 'sometimes|nullable|date',
+            'remember_date' => 'sometimes|nullable|date',
+            'action_type'   => 'sometimes|nullable|string',
+            'owner_id'      => 'sometimes|nullable|exists:users,id',
         ]);
 
         $task->update(array_merge($validated, [
             'updated_by' => Auth::id()
         ]));
 
-        // Cargar relaciones necesarias
-        $task->load(['activity', 'createdBy', 'owner']);
+        $task->load(['activity', 'createdBy', 'owner', 'contact']);
 
         return response()->json([
             'message' => 'Tarea actualizada exitosamente',
@@ -200,12 +215,12 @@ class TaskController extends Controller
     }
 
     /**
-     * ✅ Eliminar tarea.
+     * ✅ Eliminar tarea (DELETE).
+     * Permite eliminar una tarea específica.
      */
     public function deleteTask(Task $task)
     {
         $task->delete();
-
         return response()->json([
             'message' => 'Tarea eliminada correctamente'
         ]);
