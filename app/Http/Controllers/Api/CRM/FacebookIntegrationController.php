@@ -67,11 +67,14 @@ class FacebookIntegrationController extends Controller
         $longLivedToken = $response->json()['access_token'];
 
         // 3. Guardar el token en la configuración de la integración
-        $integration = Integration::where('provider', 'facebook')->firstOrFail();
-        $credentials = $integration->credentials;
-        $credentials['user_access_token'] = $longLivedToken;
-        $integration->credentials = $credentials;
-        $integration->save();
+        if ($longLivedToken) {
+            Integration::create([
+                'provider' => 'facebook',
+                'name' => 'Nueva Conexión de Facebook - ' . now()->format('Y-m-d H:i'),
+                'credentials' => ['user_access_token' => $longLivedToken],
+                'is_active' => false // Se activa cuando el usuario suscribe una página
+            ]);
+        }
 
         return response()->view('auth.facebook-callback', ['success' => true]);
     }
