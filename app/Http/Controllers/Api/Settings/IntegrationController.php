@@ -28,4 +28,15 @@ class IntegrationController extends Controller
 
         return response()->json($integration);
     }
+
+    public function updateName(Request $request, Integration $integration)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        $integration->update(['name' => $validated['name']]);
+
+        return response()->json(['message' => 'Nombre de la integración actualizado.']);
+    }
 }

@@ -308,6 +308,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('settings')->group(function() {
     // ... (otras rutas de settings)
         Route::apiResource('integrations', IntegrationController::class)->except(['store', 'destroy']);
+        Route::patch('/integrations/{integration}/name', [IntegrationController::class, 'updateName']);
         Route::apiResource('roles', RoleController::class);
         Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();

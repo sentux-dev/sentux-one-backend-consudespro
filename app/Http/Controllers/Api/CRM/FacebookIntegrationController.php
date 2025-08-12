@@ -103,18 +103,26 @@ class FacebookIntegrationController extends Controller
      */
     public function getFormsForPage(Request $request, string $pageId)
     {
-        $integration = Integration::where('provider', 'facebook')->first();
-        $token = $integration->credentials['page_access_token'] ?? $integration->credentials['user_access_token'] ?? null;
+        $validated = $request->validate([
+            'page_access_token' => 'required|string',
+        ]);
+
+        $token = $validated['page_access_token'];
 
         if (!$token) {
-            return response()->json(['message' => 'No se ha conectado una cuenta.'], 400);
+            return response()->json(['message' => 'Token de página no proporcionado.'], 400);
         }
 
         $response = Http::get("https://graph.facebook.com/".config('services.facebook.graph_version')."/{$pageId}/leadgen_forms", [
             'access_token' => $token,
             'fields' => 'id,name',
         ]);
-        
+
+        if ($response->failed()) {
+            Log::error("Error al obtener formularios para la página {$pageId}", $response->json());
+            return response()->json(['message' => 'No se pudieron obtener los formularios de la página.'], 500);
+        }
+
         return response()->json($response->json()['data'] ?? []);
     }
 
