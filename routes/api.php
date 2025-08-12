@@ -74,6 +74,7 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'reset'])->name
 
 Route::get('/facebook/webhook', [FacebookWebhookController::class, 'verify']);
 Route::post('/facebook/webhook', [FacebookWebhookController::class, 'handle']);
+Route::get('/facebook/callback', [FacebookIntegrationController::class, 'handleCallback']);
 
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -86,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/facebook/auth-url', [FacebookIntegrationController::class, 'getAuthUrl']);
     Route::get('/facebook/pages', [FacebookIntegrationController::class, 'getPages']);
+    Route::get('/facebook/pages/{pageId}/forms', [FacebookIntegrationController::class, 'getFormsForPage']);
     Route::post('/facebook/subscribe-page', [FacebookIntegrationController::class, 'subscribePage']);
 
 

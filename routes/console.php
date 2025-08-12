@@ -19,3 +19,4 @@ Schedule::command('crm:send-task-digests')->dailyAt('7:00')->timezone($appTimezo
 Schedule::command('crm:update-overdue-tasks')->hourly()->timezone($appTimezone);
 Schedule::command('crm:process-sequences')->everyMinute(); // Este no necesita timezone porque se ejecuta constantemente.
 Schedule::command('crm:send-task-reminders')->everyMinute();
+Schedule::command('crm:fetch-facebook-leads')->everyFiveMinutes();
