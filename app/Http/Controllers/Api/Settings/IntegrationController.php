@@ -16,18 +16,40 @@ class IntegrationController extends Controller
     {
         return Integration::all();
     }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'provider' => 'required|string|in:db_import,facebook,mandrill',
+            'name' => 'required|string|max:255',
+        ]);
+
+        $integration = Integration::create([
+            'provider' => $validated['provider'],
+            'name' => $validated['name'],
+            'credentials' => [],
+            'is_active' => false,
+        ]);
+
+        return response()->json($integration, 201);
+    }
     
     public function update(Request $request, Integration $integration, IntegrationService $integrationService)
     {
+        // ✅ 1. Validación más flexible y correcta
         $validated = $request->validate([
-            'credentials.secret' => 'required|string',
-            'credentials.webhook_key' => 'required|string',
-            'is_active' => 'boolean',
+            'is_active' => 'required|boolean',
+            'credentials' => 'required|array', // Validamos que 'credentials' sea un objeto/array
         ]);
 
-        $integration->update($validated);
+        // ✅ 2. Asignación directa de las propiedades al modelo
+        $integration->is_active = $validated['is_active'];
+        $integration->credentials = $validated['credentials']; // Asignamos el objeto de credenciales completo
         
-        // 🔹 ¡Paso clave! Limpiar la caché para que se usen las nuevas credenciales.
+        // ✅ 3. Guardamos los cambios
+        $integration->save();
+        
+        // 4. Limpiamos la caché para que la aplicación use las nuevas credenciales inmediatamente.
         $integrationService->clearCache($integration->provider);
 
         return response()->json($integration);
