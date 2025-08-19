@@ -106,4 +106,39 @@ class ContactLookupController extends Controller
 
         return response()->json($allFields);
     }
+
+    public function crmFieldsForMapping()
+    {
+        // 1. Definimos los campos estándar (nativos) del modelo Contact
+        $nativeFields = [
+            ['group' => 'Información Principal', 'value' => 'first_name', 'label' => 'Nombre'],
+            ['group' => 'Información Principal', 'value' => 'last_name', 'label' => 'Apellido'],
+            ['group' => 'Información Principal', 'value' => 'email', 'label' => 'Email'],
+            ['group' => 'Información de Contacto', 'value' => 'phone', 'label' => 'Teléfono Fijo'],
+            ['group' => 'Información de Contacto', 'value' => 'cellphone', 'label' => 'Celular / Móvil'],
+            ['group' => 'Información Profesional', 'value' => 'occupation', 'label' => 'Ocupación'],
+            ['group' => 'Información Profesional', 'value' => 'job_position', 'label' => 'Cargo'],
+            ['group' => 'Información Profesional', 'value' => 'current_company', 'label' => 'Empresa Actual'],
+            ['group' => 'Información Demográfica', 'value' => 'birthdate', 'label' => 'Fecha de Nacimiento'],
+            ['group' => 'Información Demográfica', 'value' => 'country', 'label' => 'País'],
+            ['group' => 'Información Demográfica', 'value' => 'address', 'label' => 'Dirección'],
+        ];
+
+        // 2. Obtenemos los campos personalizados activos que has creado
+        $customFields = \App\Models\Crm\ContactCustomField::where('active', true)
+            ->get()
+            ->map(function ($field) {
+                return [
+                    // Usamos un prefijo 'cf_' para diferenciar los campos personalizados
+                    'group' => 'Campos Personalizados',
+                    'value' => 'cf_' . $field->name, 
+                    'label' => $field->label
+                ];
+            });
+
+        // 3. Combinamos ambas listas y las devolvemos
+        $allFields = array_merge($nativeFields, $customFields->toArray());
+
+        return response()->json($allFields);
+    }
 }

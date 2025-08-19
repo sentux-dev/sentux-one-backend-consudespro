@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\CRM\ContactCustomFieldController;
 use App\Http\Controllers\Api\CRM\ContactCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\ContactLookupController;
 use App\Http\Controllers\Api\CRM\ContactStatusController;
+use App\Http\Controllers\Api\CRM\DatabaseImportController;
 use App\Http\Controllers\Api\CRM\DealController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
@@ -234,6 +235,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/status', [ContactLookupController::class, 'status']);
             Route::get('/disqualification_reasons', [ContactLookupController::class, 'disqualificationReasons']);
             Route::get('/contact-fields', [ContactLookupController::class, 'contactFields']);
+            Route::get('/crm-fields-mapping', [ContactLookupController::class, 'crmFieldsForMapping']);
+
         });
 
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
@@ -308,8 +311,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('settings')->group(function() {
     // ... (otras rutas de settings)
-        Route::apiResource('integrations', IntegrationController::class)->except(['store']);
+        Route::apiResource('integrations', IntegrationController::class);
         Route::patch('/integrations/{integration}/name', [IntegrationController::class, 'updateName']);
+        Route::prefix('integrations/{integration}/db-import')->middleware('auth:sanctum')->group(function () {
+            Route::get('tables', [DatabaseImportController::class, 'getTables']);
+            Route::get('columns', [DatabaseImportController::class, 'getColumns']);
+        });
         Route::apiResource('roles', RoleController::class);
         Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();
