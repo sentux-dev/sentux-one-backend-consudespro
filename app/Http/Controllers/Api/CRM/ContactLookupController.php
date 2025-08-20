@@ -91,8 +91,8 @@ class ContactLookupController extends Controller
             ->map(function ($field) {
                 return [
                     // Usamos un prefijo 'cf_' para diferenciar los campos personalizados en el backend
-                    'value' => 'cf_' . $field->slug, 
-                    'label' => $field->name . ' (Personalizado)'
+                    'value' => 'cf_' . $field->name, 
+                    'label' => $field->label . ' (Personalizado)'
                 ];
             });
 

@@ -293,7 +293,7 @@ class ProcessLeadJob implements ShouldQueue
         $fieldKey = data_get($params, 'field_key');
         $valueType = data_get($params, 'value_type', 'static');
         $fieldValue = null;
-        $payloadKey = null; // ✅ Variable para logging
+        $payloadKey = null;
 
         if (empty($fieldKey)) {
             throw new \Exception("La acción 'set_field_value' requiere un 'field_key'.");
@@ -304,10 +304,8 @@ class ProcessLeadJob implements ShouldQueue
             if (empty($payloadKey)) {
                 throw new \Exception("La acción 'set_field_value' con tipo 'payload' requiere un 'payload_key'.");
             }
-            // ✅ Primero busca en el payload principal
             $fieldValue = data_get($this->lead->payload, $payloadKey);
 
-            // ✅ Si no lo encuentra, busca en la fila original (fallback)
             if (is_null($fieldValue)) {
                 $fieldValue = data_get($this->lead->payload, '_original_row.' . $payloadKey);
             }
@@ -315,19 +313,19 @@ class ProcessLeadJob implements ShouldQueue
             $fieldValue = data_get($params, 'field_value');
         }
 
-        // ✅ Condición de salida mejorada con el nuevo mensaje de log
         if (is_null($fieldValue)) {
             $logMessage = $valueType === 'payload'
                 ? "Se omitió la asignación al campo '{$fieldKey}' porque la clave del payload '{$payloadKey}' no fue encontrada o su valor es nulo."
                 : "Se omitió la asignación al campo '{$fieldKey}' porque el valor estático proporcionado es nulo.";
-            
+
             $this->logAction('ACTION_SKIPPED', $logMessage);
             return;
         }
-        
+
         if (str_starts_with($fieldKey, 'cf_')) {
-            $slug = substr($fieldKey, 3);
-            $customField = ContactCustomField::where('slug', $slug)->where('active', true)->first();
+            $fieldName = substr($fieldKey, 3);
+
+            $customField = ContactCustomField::where('name', $fieldName)->where('active', true)->first();
 
             if ($customField) {
                 $this->contact->customFieldValues()->updateOrCreate(
@@ -336,10 +334,10 @@ class ProcessLeadJob implements ShouldQueue
                 );
                 $this->logAction('ACTION_EXECUTED', "Campo personalizado '{$customField->name}' actualizado a '{$fieldValue}' para el contacto ID: {$this->contact->id}");
             } else {
-                $this->logAction('ACTION_SKIPPED', "No se encontró un campo personalizado activo con el slug: '{$slug}'.");
+                // Este mensaje de log ahora es más preciso.
+                $this->logAction('ACTION_SKIPPED', "No se encontró un campo personalizado activo con el name: '{$fieldName}'.");
             }
-        } 
-        else {
+        } else {
             if (in_array($fieldKey, $this->allowedStandardFields)) {
                 $this->contact->{$fieldKey} = $fieldValue;
                 $this->contact->save();
