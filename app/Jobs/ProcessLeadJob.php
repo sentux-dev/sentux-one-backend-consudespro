@@ -327,7 +327,7 @@ class ProcessLeadJob implements ShouldQueue
         
         if (str_starts_with($fieldKey, 'cf_')) {
             $slug = substr($fieldKey, 3);
-            $customField = ContactCustomField::where('slug', $slug)->where('active', true)->first();
+            $customField = ContactCustomField::where('name', $slug)->where('active', true)->first();
 
             if ($customField) {
                 $this->contact->customFieldValues()->updateOrCreate(
