@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands\Crm;
 
+use App\Jobs\ProcessLeadJob;
 use Illuminate\Console\Command;
 use App\Models\Integration;
 use App\Models\Crm\ExternalLead;
@@ -103,8 +104,8 @@ class ImportDatabaseLeads extends Command
                         
                         Arr::set($payload, $destinationKey, $value);
                     }
-                    
-                    ExternalLead::create([
+
+                    $externalLead =ExternalLead::create([
                         'integration_id' => $integration->id,
                         'source'         => 'db_import',
                         'external_id'    => $recordArray[$cursorColumn],
@@ -112,6 +113,9 @@ class ImportDatabaseLeads extends Command
                         'status'         => 'pendiente',
                         'received_at'    => now(),
                     ]);
+
+                    ProcessLeadJob::dispatch($externalLead);
+
                     
                     $lastImportedId = $recordArray[$cursorColumn];
                 }
