@@ -8,10 +8,11 @@ class Integration extends Model
 {
     use HasFactory;
     protected $table = 'integrations';
-    protected $fillable = ['provider', 'name', 'credentials', 'is_active'];
+    protected $fillable = ['provider', 'name', 'credentials', 'is_active', 'sync_cursors'];
 
     protected $casts = [
         'credentials' => 'encrypted:array', // ¡La magia de la encriptación!
         'is_active' => 'boolean',
+        'sync_cursors' => 'array',
     ];
 }
