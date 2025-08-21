@@ -2,6 +2,8 @@
 
 namespace App\Models\Crm;
 
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -84,5 +86,30 @@ class Deal extends Model
 
         // Si la encuentra, devuelve el modelo asociado (el contacto en sí)
         return $contactAssociation ? $contactAssociation->associable : null;
+    }
+
+    public function scopeApplyPermissions(Builder $query, User $user): Builder
+    {
+        // 1. Admin ve todo.
+        if ($user->hasRole('admin')) {
+            return $query;
+        }
+
+        $hasViewAll = $user->hasPermissionTo('deals.view');
+        $hasViewOwn = $user->hasPermissionTo('deals.view.own');
+
+        // 2. Sin permisos, no ve nada.
+        if (!$hasViewAll && !$hasViewOwn) {
+            return $query->whereRaw('1 = 0');
+        }
+        
+        // 3. Si tiene permiso para ver todo, no aplicamos más filtros.
+        //    Aquí se podrían añadir reglas dinámicas en el futuro.
+        if ($hasViewAll) {
+            return $query;
+        }
+        
+        // 4. Si llega aquí, es porque SOLO tiene permiso para ver los suyos.
+        return $query->where('owner_id', $user->id);
     }
 }

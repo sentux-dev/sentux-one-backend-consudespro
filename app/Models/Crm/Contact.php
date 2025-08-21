@@ -165,46 +165,65 @@ class Contact extends Model
 
     public function scopeApplyPermissions(Builder $query, User $user): Builder
     {
-        // Si el usuario es admin, no se aplica ningún filtro.
+        // 1) Admin: acceso total
         if ($user->hasRole('admin')) {
             return $query;
         }
 
-        // Si no tiene el permiso base, no devolvemos nada.
-        if (!$user->hasPermissionTo('contacts.view')) {
+        $hasViewAll = $user->hasPermissionTo('contacts.view');
+        $hasViewOwn = $user->hasPermissionTo('contacts.view.own');
+
+        // 2) Si no tiene ninguno de los dos, no ver nada
+        if (!$hasViewAll && !$hasViewOwn) {
             return $query->whereRaw('1 = 0');
         }
 
+        // 3) Si solo tiene "own", limitar a sus propios contactos
+        if (!$hasViewAll && $hasViewOwn) {
+            return $query->where('owner_id', $user->id);
+        }
+
+        // 4) Tiene contacts.view (puede que además tenga own)
         $roleIds = $user->roles->pluck('id');
         $permission = \Spatie\Permission\Models\Permission::where('name', 'contacts.view')->first();
 
-        if (!$permission) return $query->whereRaw('1 = 0');
+        // Si por alguna razón el registro de permiso no existe, pero tiene 'own', dejamos ver sus propios contactos.
+        if (!$permission) {
+            return $hasViewOwn ? $query->where('owner_id', $user->id) : $query->whereRaw('1 = 0');
+        }
 
         $rules = \App\Models\PermissionRule::whereIn('role_id', $roleIds)
             ->where('permission_id', $permission->id)
             ->get();
 
-        // Si tiene el permiso pero no hay reglas específicas, puede ver todo.
+        // 4.a) Sin reglas => ve todo
         if ($rules->isEmpty()) {
             return $query;
         }
-        
-        // Aplicamos las reglas a la consulta principal.
-        return $query->where(function (Builder $q) use ($rules, $user) {
+
+        // 4.b) Con reglas => aplicar OR por cada regla.
+        // Si además tiene 'own', añadimos otro OR: owner_id = user.id
+        return $query->where(function (Builder $q) use ($rules, $user, $hasViewOwn) {
             foreach ($rules as $rule) {
                 $value = str_replace('{user.id}', $user->id, $rule->value);
 
                 if ($rule->field_type === 'native') {
                     $q->orWhere($rule->field_name, '=', $value);
                 } else { // custom
-                     $q->orWhereHas('customFieldValues', function (Builder $subQuery) use ($rule, $value) {
+                    $q->orWhereHas('customFieldValues', function (Builder $subQuery) use ($rule, $value) {
                         $subQuery->whereHas('field', fn($sq) => $sq->where('name', $rule->field_identifier))
-                                 ->where('value', '=', $value);
+                                ->where('value', '=', $value);
                     });
                 }
             }
+
+            // Unión con "propios" si también tiene contacts.view.own
+            if ($hasViewOwn) {
+                $q->orWhere('owner_id', $user->id);
+            }
         });
     }
+
 
     public function sequenceEnrollments(): HasMany
     {

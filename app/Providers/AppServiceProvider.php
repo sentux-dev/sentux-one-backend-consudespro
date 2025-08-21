@@ -8,9 +8,13 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate; 
 use App\Models\Crm\Contact;
+use App\Models\Crm\Deal;
+use App\Models\Crm\Task;
 use App\Models\Integration;
 use App\Policies\ContactPolicy;
+use App\Policies\DealPolicy;
 use App\Policies\IntegrationPolicy;
+use App\Policies\TaskPolicy;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -30,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
         // 🔹 Registrar políticas de autorización
         Gate::policy(Contact::class, ContactPolicy::class);
         Gate::policy(Integration::class, IntegrationPolicy::class); 
+        Gate::policy(Task::class, TaskPolicy::class);
+        Gate::policy(Deal::class, DealPolicy::class);
 
         // 🔹 Configurar límites de tasa para la API
         RateLimiter::for('login', function (Request $request) {
