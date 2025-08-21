@@ -3,19 +3,30 @@
 namespace App\Http\Controllers\Api\CRM;
 
 use App\Http\Controllers\Controller;
+use App\Models\Crm\Contact;
 use Illuminate\Http\Request;
 use App\Models\Crm\Task;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 
 class TaskController extends Controller
 {
+    use AuthorizesRequests; // ✅ Añadir el trait
+
     /**
      * ✅ Listar tareas (vista tipo tabla general)
      * Paginación y filtros.
      */
     public function listTasks(Request $request)
     {
-        $query = Task::with(['activity', 'createdBy', 'owner', 'contact']);
+        // 1. Autorización: ¿Puede el usuario ver la lista de tareas?
+        $this->authorize('viewAny', Task::class);
+
+        // 2. Aplicar el scope de permisos para filtrar la consulta base
+        $query = Task::query()->applyPermissions(Auth::user());
+
+        // 3. Cargar relaciones y aplicar filtros de la petición
+        $query->with(['activity', 'createdBy', 'owner', 'contact']);
 
         // ✅ Filtro por estado
         if ($request->filled('status')) {
@@ -104,6 +115,8 @@ class TaskController extends Controller
      */
     public function listTasksByContact(Request $request, $contactId)
     {
+        $this->authorize('view', Contact::findOrFail($contactId));
+
         $query = Task::with(['activity', 'createdBy', 'owner', 'contact'])
             ->where(function ($query) use ($contactId) {
                 $query->whereHas('activity', function ($q) use ($contactId) {
@@ -179,7 +192,6 @@ class TaskController extends Controller
      */
     public function show(Task $task)
     {
-
         $task->load(['activity', 'createdBy', 'owner', 'contact']);
         
         return response()->json([

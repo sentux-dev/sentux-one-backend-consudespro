@@ -11,13 +11,22 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\Crm\DealCustomFieldValue;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class DealController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(Request $request)
     {
-        // Añadido with('dealAssociations.associable') para cargar el contacto asociado
-        $query = Deal::query()->with('dealAssociations.associable');
+        // 1. Autorización: ¿Puede el usuario ver la lista de deals?
+        $this->authorize('viewAny', Deal::class);
+        
+        // 2. Aplicar el scope de permisos para una consulta segura
+        $query = Deal::query()->applyPermissions(Auth::user());
+
+        // 3. Cargar relaciones y aplicar filtros
+        $query->with('dealAssociations.associable');
 
         if ($request->filled('pipeline_id')) {
             $query->where('pipeline_id', $request->pipeline_id);
