@@ -57,6 +57,12 @@ class Contact extends Model
         });
     }
 
+    // concatenar first_name y last_name como name
+    public function getNameAttribute(): string
+    {
+        return "{$this->first_name} {$this->last_name}";
+    }
+
     /** ============================
      * RELACIONES
      * ============================
@@ -129,7 +135,7 @@ class Contact extends Model
     }
 
     // Accessor para última actividad
-    protected $appends = ['last_activity'];
+    protected $appends = ['last_activity', 'name'];
 
     public function getLastActivityAttribute()
     {

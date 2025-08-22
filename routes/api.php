@@ -61,6 +61,13 @@ use App\Http\Controllers\Api\Settings\PermissionRuleController;
 use App\Http\Controllers\Api\Settings\RoleController;
 use App\Http\Controllers\Api\User\Profile\ThemePreferencesController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\Sales\ProductController;
+use App\Http\Controllers\Api\Sales\QuoteActionsController;
+use App\Http\Controllers\Api\Sales\QuoteCalculatorController;
+use App\Http\Controllers\Api\Sales\QuoteController;
+use App\Http\Controllers\Api\Settings\FeeController;
+use App\Http\Controllers\Api\Settings\IssuingCompanyController;
+use App\Http\Controllers\Api\Settings\TaxController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -253,6 +260,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('workflows', WorkflowController::class);
         Route::apiResource('lead-sources', LeadSourceController::class);
     });
+
+    // Sales
+    Route::prefix('sales')->group(function () {
+        Route::apiResource('products', ProductController::class);
+        Route::post('quotes/{quote}/duplicate', [QuoteController::class, 'duplicate']);
+        Route::post('quotes/{quote}/status', [QuoteController::class, 'updateStatus'])->name('quotes.update-status');
+        Route::post('quotes/calculate', [QuoteCalculatorController::class, 'calculate']);
+        Route::get('quotes/{quote}/view-pdf', [QuoteActionsController::class, 'viewPdf'])->name('quotes.view-pdf');
+        Route::post('quotes/{quote}/send-email', [QuoteActionsController::class, 'sendEmail'])->name('quotes.send-email');
+
+        Route::apiResource('quotes', QuoteController::class);
+
+
+    });
+
     // Proyectos Inmobiliarios
     Route::prefix('real-estate')->group(function () {
         
@@ -321,6 +343,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::apiResource('roles.permissions.rules', PermissionRuleController::class)->only(['index', 'store'])->shallow();
         Route::delete('permission-rules/{permissionRule}', [PermissionRuleController::class, 'destroy'])->name('permission-rules.destroy');
+
+        Route::apiResource('taxes', TaxController::class);
+        Route::apiResource('fees', FeeController::class);
+        Route::apiResource('issuing-companies', IssuingCompanyController::class);
+        Route::post('issuing-companies/{issuingCompany}', [IssuingCompanyController::class, 'update']);
+
+
     });
 });
 
