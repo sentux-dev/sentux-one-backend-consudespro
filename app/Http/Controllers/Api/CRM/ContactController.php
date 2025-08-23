@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log as FacadesLog;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ContactController extends Controller
 {
@@ -65,7 +67,7 @@ class ContactController extends Controller
                 $q->where('first_name', 'like', "%$search%")
                   ->orWhere('last_name', 'like', "%$search%")
                   ->orWhere('email', 'like', "%$search%")
-                  ->orWhere('cellphone', 'like', "%$search%");
+                  ->orWhere('phone', 'like', "%$search%");
             });
         }
 
@@ -126,58 +128,100 @@ class ContactController extends Controller
      */
     public function store(Request $request)
     {
-        // ✅ Validación actualizada: ahora espera IDs individuales, no arrays.
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:crm_contacts,email',
-            'cellphone' => 'nullable|string|max:50',
-            'contact_status_id' => 'required|exists:crm_contact_statuses,id',
-            'owner_id' => 'nullable|exists:users,id',
-            'projects' => 'nullable|array', // Se mantiene como array si un contacto puede tener varios proyectos
-            
-            // ✅ Cambiado a singular y a 'integer'
-            'campaign_id' => 'nullable|integer|exists:crm_campaigns,id',
-            'origin_id' => 'nullable|integer|exists:crm_origins,id',
+        // Normaliza espacios (opcional pero útil)
+        $request->merge([
+            'first_name' => trim((string) $request->input('first_name')),
+            'last_name'  => trim((string) $request->input('last_name')),
+            'email'      => trim((string) $request->input('email')),
+            'phone'  => trim((string) $request->input('phone')),
+        ]);
 
-            'custom_fields' => 'nullable|array',
-            'custom_fields.*.field_id' => 'required|exists:crm_contact_custom_fields,id',
-            'custom_fields.*.value' => 'nullable|string|max:65535',
+        $this->nullifyEmpty($request, ['email','phone']);
+
+        $validated = $request->validate([
+            'first_name' => ['required','string','max:255'],
+            'last_name'  => ['nullable','string','max:255'],
+
+            // 👇 Al menos uno requerido: email O phone
+            'email' => [
+                'required_without:phone',
+                'nullable',
+                'email',
+                Rule::unique('crm_contacts', 'email')->whereNull('deleted_at'),
+            ],
+            'phone' => [
+                'required_without:email',
+                'nullable',
+                'string',
+                'max:50',
+                Rule::unique('crm_contacts', 'phone')->whereNull('deleted_at'),
+            ],
+            'contact_status_id' => ['required','exists:crm_contact_statuses,id'],
+            'owner_id'          => ['nullable','exists:users,id'],
+
+            'projects'   => ['nullable','array'],
+
+            // Singular
+            'campaign_id' => ['nullable','integer','exists:crm_campaigns,id'],
+            'origin_id'   => ['nullable','integer','exists:crm_origins,id'],
+
+            'custom_fields'              => ['nullable','array'],
+            'custom_fields.*.field_id'   => ['required','exists:crm_contact_custom_fields,id'],
+            'custom_fields.*.value'      => ['nullable','string','max:65535'],
         ]);
 
         DB::beginTransaction();
         try {
-            // Se crea el contacto con los campos principales
-            $contact = Contact::create($validated);
+            // Crea solo con campos del modelo (evita keys ajenas)
+            $contact = Contact::create([
+                'first_name'            => $validated['first_name'],
+                'last_name'             => $validated['last_name'] ?? null,
+                'email'                 => $validated['email'] ?? null,
+                'phone'                 => $validated['phone'] ?? null,
+                'contact_status_id'     => $validated['contact_status_id'],
+                'owner_id'              => $validated['owner_id'] ?? Auth::id(),
+                'occupation'            => $request->input('occupation'),      // si los usas
+                'job_position'          => $request->input('job_position'),
+                'current_company'       => $request->input('current_company'),
+                'birthdate'             => $request->input('birthdate'),
+                'address'               => $request->input('address'),
+                'country'               => $request->input('country'),
+                'active'                => $request->boolean('active', true),
+                'subscribed_to_newsletter'      => $request->boolean('subscribed_to_newsletter'),
+                'subscribed_to_product_updates' => $request->boolean('subscribed_to_product_updates'),
+                'subscribed_to_promotions'      => $request->boolean('subscribed_to_promotions'),
+            ]);
 
-            // Guardar campos personalizados
+            // Campos personalizados
             if (!empty($validated['custom_fields'])) {
                 foreach ($validated['custom_fields'] as $cf) {
-                    if (!is_null($cf['value'])) {
+                    if ($cf['value'] !== null && $cf['value'] !== '') {
                         $contact->customFieldValues()->create([
                             'custom_field_id' => $cf['field_id'],
-                            'value' => $cf['value']
+                            'value'           => $cf['value'],
                         ]);
                     }
                 }
             }
-            
-            // Guardar proyectos (se mantiene igual)
+
+            // Proyectos
             if (!empty($validated['projects'])) {
                 $contact->projects()->attach($validated['projects']);
             }
 
-            // Lógica para la primera campaña y origen (historial)
+            // Campaña / Origen iniciales (historial)
             if (!empty($validated['campaign_id'])) {
                 $contact->campaigns()->attach($validated['campaign_id'], [
                     'is_original' => true,
-                    'is_last' => true
+                    'is_last'     => true,
+                    'entry_at'    => now(),
                 ]);
             }
             if (!empty($validated['origin_id'])) {
                 $contact->origins()->attach($validated['origin_id'], [
                     'is_original' => true,
-                    'is_last' => true
+                    'is_last'     => true,
+                    'entry_at'    => now(),
                 ]);
             }
 
@@ -185,12 +229,15 @@ class ContactController extends Controller
 
             return response()->json([
                 'message' => 'Contacto creado correctamente',
-                'contact' => new ContactResource($contact) // ✅ ¡Esta es la corrección clave!
+                'contact' => new ContactResource($contact),
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Error al crear contacto', 'error' => $e->getMessage()], 500);
+            return response()->json([
+                'message' => 'Error al crear contacto',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
     
@@ -212,24 +259,112 @@ class ContactController extends Controller
     /**
      * Actualiza un contacto completo (PUT).
      */
-    public function update(Request $request, Contact $contact)
+    public function update(Request $request, Contact $contact): JsonResponse
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => "required|email|unique:crm_contacts,email,{$contact->id}",
-            'projects' => 'sometimes|array',
-            'campaigns' => 'sometimes|array',
-            'origins' => 'sometimes|array',
+        // Normaliza espacios
+        $request->merge([
+            'first_name' => trim((string) $request->input('first_name', $contact->first_name)),
+            'last_name'  => trim((string) $request->input('last_name', $contact->last_name)),
+            'email'      => trim((string) $request->input('email', $contact->email)),
+            'phone'      => trim((string) $request->input('phone', $contact->phone)),
         ]);
+
+        $this->nullifyEmpty($request, ['email','phone']);
+
+        // Reglas: en PUT pedimos first_name y contact_status_id; email/phone con unicidad e interdependencia
+        $validator = Validator::make($request->all(), [
+            'first_name' => ['required','string','max:255'],
+            'last_name'  => ['nullable','string','max:255'],
+
+            'email' => [
+                'nullable','email',
+                Rule::unique('crm_contacts', 'email')
+                    ->ignore($contact->id)
+                    ->whereNull('deleted_at'),
+            ],
+            'phone' => [
+                'nullable','string','max:50',
+                Rule::unique('crm_contacts', 'phone')
+                    ->ignore($contact->id)
+                    ->whereNull('deleted_at'),
+            ],
+            'contact_status_id' => ['required','exists:crm_contact_statuses,id'],
+            'owner_id'          => ['nullable','exists:users,id'],
+
+            'projects'   => ['sometimes','array'],
+
+            // asociaciones (si aplican en tu UI para PUT)
+            'campaigns'  => ['sometimes','array'],
+            'origins'    => ['sometimes','array'],
+
+            // custom fields (si los soportas en update)
+            'custom_fields'            => ['sometimes','array'],
+            'custom_fields.*.field_id' => ['required_with:custom_fields','exists:crm_contact_custom_fields,id'],
+            'custom_fields.*.value'    => ['nullable','string','max:65535'],
+        ]);
+
+        // Regla compuesta: al final, debe quedar al menos uno (email o phone)
+        $validator->after(function ($v) use ($request, $contact) {
+            $finalEmail = $request->filled('email') ? $request->input('email') : $contact->email;
+            $finalCell  = $request->filled('phone') ? $request->input('phone') : $contact->phone;
+
+            // Si explícitamente envías null para uno de ellos, respeta eso:
+            if ($request->has('email') && $request->input('email') === null) {
+                $finalEmail = null;
+            }
+            if ($request->has('phone') && $request->input('phone') === null) {
+                $finalCell = null;
+            }
+
+            if (empty($finalEmail) && empty($finalCell)) {
+                $v->errors()->add('email', 'Debes proporcionar al menos el correo o el número de celular.');
+                $v->errors()->add('phone', 'Debes proporcionar al menos el correo o el número de celular.');
+            }
+        });
+
+        $validated = $validator->validate();
 
         DB::beginTransaction();
         try {
-            $contact->update($validated);
+            // Actualiza campos del modelo
+            $contact->update([
+                'first_name'            => $validated['first_name'],
+                'last_name'             => $validated['last_name'] ?? null,
+                'email'                 => $validated['email'] ?? ($request->has('email') ? null : $contact->email),
+                'phone'                 => $validated['phone'] ?? ($request->has('phone') ? null : $contact->phone),
+                'contact_status_id'     => $validated['contact_status_id'],
+                'owner_id'              => $validated['owner_id'] ?? $contact->owner_id,
+                'occupation'            => $request->input('occupation', $contact->occupation),
+                'job_position'          => $request->input('job_position', $contact->job_position),
+                'current_company'       => $request->input('current_company', $contact->current_company),
+                'birthdate'             => $request->input('birthdate', $contact->birthdate),
+                'address'               => $request->input('address', $contact->address),
+                'country'               => $request->input('country', $contact->country),
+                'active'                => $request->has('active') ? $request->boolean('active') : $contact->active,
+                'subscribed_to_newsletter'      => $request->has('subscribed_to_newsletter') ? $request->boolean('subscribed_to_newsletter') : $contact->subscribed_to_newsletter,
+                'subscribed_to_product_updates' => $request->has('subscribed_to_product_updates') ? $request->boolean('subscribed_to_product_updates') : $contact->subscribed_to_product_updates,
+                'subscribed_to_promotions'      => $request->has('subscribed_to_promotions') ? $request->boolean('subscribed_to_promotions') : $contact->subscribed_to_promotions,
+            ]);
 
+            // Custom fields (opcional)
+            if ($request->has('custom_fields')) {
+                $contact->customFieldValues()->delete();
+                foreach ($validated['custom_fields'] ?? [] as $cf) {
+                    if ($cf['value'] !== null && $cf['value'] !== '') {
+                        $contact->customFieldValues()->create([
+                            'custom_field_id' => $cf['field_id'],
+                            'value'           => $cf['value'],
+                        ]);
+                    }
+                }
+            }
+
+            // Proyectos
             if ($request->has('projects')) {
                 $contact->projects()->sync($validated['projects'] ?? []);
             }
+
+            // Historial campañas / orígenes
             if ($request->has('campaigns')) {
                 $this->updateAssociationHistory($contact, 'campaigns', $validated['campaigns'] ?? []);
             }
@@ -238,9 +373,11 @@ class ContactController extends Controller
             }
 
             DB::commit();
-            return response()->json(['message' => 'Contacto actualizado correctamente', 'contact' => $contact->fresh()->load('projects', 'campaigns', 'origins')]);
 
-        } catch (\Exception $e) {
+            $contact->load(['status','disqualificationReason','owner','deals','campaigns','origins','projects']);
+            return (new ContactResource($contact))->response()->setStatusCode(200);
+
+        } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json(['message' => 'Error al actualizar contacto', 'error' => $e->getMessage()], 500);
         }
@@ -251,38 +388,103 @@ class ContactController extends Controller
      */
     public function updatePatch(Request $request, Contact $contact): JsonResponse
     {
-        $validated = $request->validate([
-            'first_name' => 'sometimes|string|max:255',
-            'last_name' => 'sometimes|string|max:255',
-            'email' => "sometimes|email|unique:crm_contacts,email,{$contact->id}",
-            'campaigns' => 'sometimes|array',
-            'origins' => 'sometimes|array',
+        // Normaliza espacios (sin pisar si no vienen)
+        if ($request->has('first_name')) $request->merge(['first_name' => trim((string) $request->input('first_name'))]);
+        if ($request->has('last_name'))  $request->merge(['last_name'  => trim((string) $request->input('last_name'))]);
+        if ($request->has('email'))      $request->merge(['email'      => trim((string) $request->input('email'))]);
+        if ($request->has('phone'))      $request->merge(['phone'      => trim((string) $request->input('phone'))]);
+
+        $this->nullifyEmpty($request, ['email','phone']);
+
+        $validator = Validator::make($request->all(), [
+            'first_name' => ['sometimes','string','max:255'],
+            'last_name'  => ['sometimes','string','max:255'],
+
+            'email' => [
+                'sometimes','nullable','email',
+                Rule::unique('crm_contacts', 'email')
+                    ->ignore($contact->id)
+                    ->whereNull('deleted_at'),
+            ],
+            'phone' => [
+                'sometimes','nullable','string','max:50',
+                Rule::unique('crm_contacts', 'phone')
+                    ->ignore($contact->id)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'contact_status_id' => ['sometimes','exists:crm_contact_statuses,id'],
+            'owner_id'          => ['sometimes','nullable','exists:users,id'],
+
+            'projects'   => ['sometimes','array'],
+            'campaigns'  => ['sometimes','array'],
+            'origins'    => ['sometimes','array'],
+
+            'custom_fields'            => ['sometimes','array'],
+            'custom_fields.*.field_id' => ['required_with:custom_fields','exists:crm_contact_custom_fields,id'],
+            'custom_fields.*.value'    => ['nullable','string','max:65535'],
         ]);
+
+        // Regla compuesta: tras aplicar parches, debe quedar al menos email o phone
+        $validator->after(function ($v) use ($request, $contact) {
+            $finalEmail = $request->has('email') ? $request->input('email') : $contact->email;
+            $finalCell  = $request->has('phone') ? $request->input('phone') : $contact->phone;
+
+            if ($finalEmail === '') $finalEmail = null;
+            if ($finalCell === '')  $finalCell  = null;
+
+            if (empty($finalEmail) && empty($finalCell)) {
+                $v->errors()->add('email', 'Debes conservar al menos el correo o el número de celular.');
+                $v->errors()->add('phone', 'Debes conservar al menos el correo o el número de celular.');
+            }
+        });
+
+        $validated = $validator->validate();
 
         try {
             DB::beginTransaction();
-            
+
+            // Solo campos presentes
             $contact->fill($request->only([
-                'first_name', 'last_name', 'phone', 'cellphone', 'email', 'occupation', 
-                'job_position', 'birthdate', 'contact_status_id', 'owner_id', 
-                'disqualification_reason_id', 'address', 'country',
-                'subscribed_to_newsletter', 'subscribed_to_product_updates', 'subscribed_to_promotions'
+                'first_name','last_name','phone','phone','email','occupation',
+                'job_position','birthdate','contact_status_id','owner_id',
+                'disqualification_reason_id','address','country',
+                'subscribed_to_newsletter','subscribed_to_product_updates','subscribed_to_promotions',
             ]));
-            
+
+            // Custom fields
+            if ($request->has('custom_fields')) {
+                $contact->customFieldValues()->delete();
+                foreach ($validated['custom_fields'] ?? [] as $cf) {
+                    if ($cf['value'] !== null && $cf['value'] !== '') {
+                        $contact->customFieldValues()->create([
+                            'custom_field_id' => $cf['field_id'],
+                            'value'           => $cf['value'],
+                        ]);
+                    }
+                }
+            }
+
+            // Proyectos
+            if ($request->has('projects')) {
+                $contact->projects()->sync($validated['projects'] ?? []);
+            }
+
+            // Historial
             if ($request->has('campaigns')) {
-                $this->updateAssociationHistory($contact, 'campaigns', $validated['campaigns']);
+                $this->updateAssociationHistory($contact, 'campaigns', $validated['campaigns'] ?? []);
             }
             if ($request->has('origins')) {
-                $this->updateAssociationHistory($contact, 'origins', $validated['origins']);
+                $this->updateAssociationHistory($contact, 'origins', $validated['origins'] ?? []);
             }
-            
+
             $contact->save();
             DB::commit();
-            
-            $contact->load(['status', 'disqualificationReason', 'owner', 'deals', 'campaigns', 'origins', 'projects']);
+
+            $contact->load(['status','disqualificationReason','owner','deals','campaigns','origins','projects']);
             return (new ContactResource($contact))->response()->setStatusCode(200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json(['message' => 'Error al actualizar el contacto', 'error' => $e->getMessage()], 500);
         }
@@ -355,6 +557,18 @@ class ContactController extends Controller
         });
 
         return response()->json($formattedHistory);
+    }
+
+    private function nullifyEmpty( Request $request, array $keys): void
+    {
+        $payload = $request->all();
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $payload)) {
+                $v = is_string($payload[$key]) ? trim($payload[$key]) : $payload[$key];
+                $payload[$key] = ( $v === '' ? null : $v);
+            }
+        }
+        $request->replace($payload);
     }
     
     /**
