@@ -115,15 +115,9 @@ class TaskController extends Controller
      */
     public function listTasksByContact(Request $request, $contactId)
     {
-        $this->authorize('view', Contact::findOrFail($contactId));
 
         $query = Task::with(['activity', 'createdBy', 'owner', 'contact'])
-            ->where(function ($query) use ($contactId) {
-                $query->whereHas('activity', function ($q) use ($contactId) {
-                    $q->where('contact_id', $contactId);
-                })
-                ->orWhereNull('activity_id'); // Tareas independientes
-            });
+        ->where('contact_id', $contactId);
 
         // ✅ Filtro por estado
         if ($request->filled('status')) {
