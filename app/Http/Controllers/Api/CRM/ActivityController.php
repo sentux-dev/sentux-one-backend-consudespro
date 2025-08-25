@@ -51,7 +51,13 @@ class ActivityController extends Controller
             'send_invitation' => 'nullable|boolean',
             'external_guests' => 'nullable|array',
             'external_guests.*' => 'email',
+            'action_type' => 'nullable|string|max:50'
         ]);
+
+        // si viene action_type remplaza a task_action_type
+        if (isset($validated['action_type'])) {
+            $validated['task_action_type'] = $validated['action_type'];
+        }
 
         // Asignar el usuario autenticado como creador de la actividad
         $validated['created_by'] = Auth::id();
