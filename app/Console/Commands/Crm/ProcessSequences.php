@@ -6,6 +6,9 @@ use App\Mail\SequenceEmail;
 use Illuminate\Console\Command;
 use App\Models\Crm\ContactSequenceEnrollment;
 use App\Models\Crm\EmailTemplate;
+use App\Models\Marketing\EmailLog;
+use App\Models\Crm\Activity;
+use App\Services\Email\EmailProviderManager;
 use App\Models\Crm\Task;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -67,6 +70,7 @@ class ProcessSequences extends Command
             $nextStep = $enrollment->sequence->steps->where('order', $enrollment->current_step)->first();
             $this->info("   - Procesando Contacto #{$enrollment->contact_id} para el paso #{$enrollment->current_step} (vencimiento: {$enrollment->next_step_due_at})");
 
+            $this->info($nextStep->action_type);
             // Solo nos interesan las tareas manuales en esta fase
             if ($nextStep && $nextStep->action_type === 'create_manual_task') {
                 $this->createManualTask($enrollment, $nextStep);
@@ -132,6 +136,17 @@ class ProcessSequences extends Command
             'schedule_date' => $dueDate,
             'remember_date' => $dueDate->copy()->subMinutes(15), // Recordatorio 15 mins antes
         ]);
+
+        // Crear la actividad
+
+        Activity::create([
+            'contact_id' => $enrollment->contact_id,
+            'type' => 'tarea',
+            'title' => ' [Tarea de Secuencia] ' .$step->parameters['description'],
+            'description' => '[ ' . $step->parameters['task_type'] . ' ] ' . $step->parameters['description'],
+            'created_by' => null, // Actividad creada por el sistema
+        ]);
+
         $this->info("   - Tarea '{$step->parameters['description']}' creada para Contacto #{$enrollment->contact_id}. Vence: " . $dueDate->toDateTimeString());
     }
 
@@ -142,6 +157,12 @@ class ProcessSequences extends Command
     {
         $contact = $enrollment->contact;
         $template = EmailTemplate::find($step->parameters['template_id']);
+
+        if (!$contact || !$contact->email) {
+            $this->error("   - Contacto #{$enrollment->contact_id} no tiene email. Omitiendo paso.");
+            return;
+        }
+
         if (!$template) {
             $this->error("   - Plantilla #{$step->parameters['template_id']} no encontrada. Omitiendo paso.");
             return;
@@ -153,11 +174,46 @@ class ProcessSequences extends Command
 
         $finalBody = str_replace($placeholders, $replacements, $template->body);
         $finalSubject = str_replace($placeholders, $replacements, $template->subject);
+
+        // 1. Obtenemos el gestor de correo
+        $emailManager = app(EmailProviderManager::class);
+
+        // 2. Enviamos el correo UNA SOLA VEZ a través del gestor para obtener el ID de seguimiento
+        $messageId = $emailManager->driver()->send(
+            $contact->email,
+            $finalSubject,
+            $finalBody,
+            $owner->email ?? config('mail.from.address'),
+            $owner->name ?? config('mail.from.name')
+        );
+
+        if (!$messageId) {
+            $this->error("   - Fallo al enviar correo a {$contact->email} a través del proveedor.");
+            return; // Si el envío falla, no continuamos.
+        }
+
+        // 3. Creamos el registro de seguimiento (EmailLog)
+        $emailLog = EmailLog::create([
+            'contact_id' => $contact->id,
+            'provider_message_id' => $messageId,
+            'status' => 'enviado',
+        ]);
+
+        // 4. Creamos la actividad visible para el usuario y la enlazamos
+        Activity::create([
+            'contact_id' => $contact->id,
+            'email_log_id' => $emailLog->id,
+            'type' => 'correo',
+            'title' => '[Correo de Secuencia] - ' . $template->name,
+            'description' => "Asunto: \"{$finalSubject}\"",
+            'created_by' => null, // Actividad creada por el sistema
+        ]);
+
+        // ✅ CORRECCIÓN: Se eliminó el envío duplicado de abajo
+        // Mail::to($contact->email)->send(new SequenceEmail($finalSubject, $finalBody, $owner));
         
-        Mail::to($contact->email)->send(new SequenceEmail($finalSubject, $finalBody, $owner));
-        
-        $senderEmail = $owner->email ?? config('mail.from.address');
-        $this->info("   - Email enviado a {$contact->email} desde {$senderEmail}");
+        // ✅ CORRECCIÓN: Se actualizó el mensaje de log para ser más preciso
+        $this->info("   - Email de secuencia enviado a {$contact->email} y registrado como actividad.");
     }
 
     /**

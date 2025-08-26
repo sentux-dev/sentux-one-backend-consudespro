@@ -4,6 +4,7 @@ namespace App\Models\Crm;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Marketing\EmailLog;
 
 class Activity extends Model
 {
@@ -22,6 +23,7 @@ class Activity extends Model
         'send_invitation',
         'created_by', // ID del usuario que creó la actividad
         'updated_by', // ID del usuario que actualizó la actividad
+        'email_log_id', // ID del log de email asociado (si aplica)
     ];
 
     protected $casts = [
@@ -64,5 +66,10 @@ class Activity extends Model
     public function task()
     {
         return $this->hasOne(Task::class, 'activity_id');
+    }
+
+    public function emailLog()
+    {
+        return $this->belongsTo(EmailLog::class, 'email_log_id');
     }
 }
