@@ -47,12 +47,32 @@ class TaskController extends Controller
 
         // ✅ Filtro por rango de fechas (schedule_date o created_at si no hay schedule_date)
         if ($request->filled('start_date') && $request->filled('end_date')) {
-            $query->where(function ($q) use ($request) {
-                $q->whereBetween('schedule_date', [$request->start_date, $request->end_date])
-                ->orWhere(function ($qa) use ($request) {
+            $timezone = Auth::user()->timezone ?? config('app.timezone', 'UTC');
+
+            // Convertir el rango desde la zona horaria del usuario a UTC
+            $startDateUtc = \Carbon\Carbon::parse($request->start_date, $timezone)->startOfDay()->setTimezone('UTC');
+            $endDateUtc = \Carbon\Carbon::parse($request->end_date, $timezone)->endOfDay()->setTimezone('UTC');
+
+            $query->where(function ($q) use ($startDateUtc, $endDateUtc) {
+                $q->whereBetween('schedule_date', [$startDateUtc, $endDateUtc])
+                ->orWhere(function ($qa) use ($startDateUtc, $endDateUtc) {
                     $qa->whereNull('schedule_date')
-                        ->whereBetween('created_at', [$request->start_date, $request->end_date]);
+                        ->whereBetween('created_at', [$startDateUtc, $endDateUtc]);
                 });
+            });
+        }
+
+
+
+        if (filter_var($request->query('hide_future'), FILTER_VALIDATE_BOOLEAN)) {
+            $timezone = Auth::user()->timezone ?? config('app.timezone', 'UTC');
+
+            // Obtener fin del día en la zona horaria del usuario
+            $endOfTodayUtc = now($timezone)->endOfDay()->setTimezone('UTC');
+
+            $query->where(function ($q) use ($endOfTodayUtc) {
+                $q->where('schedule_date', '<=', $endOfTodayUtc)
+                ->orWhereNull('schedule_date');
             });
         }
 
