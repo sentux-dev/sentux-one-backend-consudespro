@@ -19,6 +19,7 @@ class ActivityController extends Controller
     public function index($contactId)
     {
         $activities = Activity::where('contact_id', $contactId)
+            ->with('emailLog')
             ->latest()
             ->get();
 
