@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\CRM\DealCustomFieldController;
 use App\Http\Controllers\Api\CRM\DealCustomFieldValueController;
 use App\Http\Controllers\Api\CRM\DealLookupController;
 use App\Http\Controllers\Api\CRM\DisqualificationReasonController;
+use App\Http\Controllers\Api\Crm\EmailController;
 use App\Http\Controllers\Api\CRM\EmailTemplateController;
 use App\Http\Controllers\Api\CRM\FacebookIntegrationController;
 use App\Http\Controllers\Api\CRM\FacebookWebhookController;
@@ -65,6 +66,7 @@ use App\Http\Controllers\Api\Sales\ProductController;
 use App\Http\Controllers\Api\Sales\QuoteActionsController;
 use App\Http\Controllers\Api\Sales\QuoteCalculatorController;
 use App\Http\Controllers\Api\Sales\QuoteController;
+use App\Http\Controllers\Api\Settings\EmailAccountController;
 use App\Http\Controllers\Api\Settings\FeeController;
 use App\Http\Controllers\Api\Settings\IssuingCompanyController;
 use App\Http\Controllers\Api\Settings\TaxController;
@@ -259,6 +261,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('workflows', WorkflowController::class);
         Route::apiResource('lead-sources', LeadSourceController::class);
+
+        Route::post('emails/send', [EmailController::class, 'send']);
     });
 
     // Sales
@@ -349,6 +353,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('issuing-companies', IssuingCompanyController::class);
         Route::post('issuing-companies/{issuingCompany}', [IssuingCompanyController::class, 'update']);
 
+
+        Route::post('email-accounts/test-connection', [EmailAccountController::class, 'testConnection']);
+        Route::apiResource('email-accounts', EmailAccountController::class)->except(['show', 'update']);
 
     });
 });

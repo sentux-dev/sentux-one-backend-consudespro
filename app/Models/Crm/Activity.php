@@ -24,6 +24,9 @@ class Activity extends Model
         'created_by', // ID del usuario que creó la actividad
         'updated_by', // ID del usuario que actualizó la actividad
         'email_log_id', // ID del log de email asociado (si aplica)
+        'external_message_id', // ID del mensaje externo (si aplica)
+        'html_description',
+        'has_inline_images'
     ];
 
     protected $casts = [
@@ -54,7 +57,7 @@ class Activity extends Model
         return $this->belongsTo(Contact::class);
     }
 
-        public function createdBy()
+    public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
@@ -71,5 +74,13 @@ class Activity extends Model
     public function emailLog()
     {
         return $this->belongsTo(EmailLog::class, 'email_log_id');
+    }
+
+    public function attachments() {
+        return $this->hasMany(ActivityAttachment::class);
+    }
+
+    public function creator() {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }
