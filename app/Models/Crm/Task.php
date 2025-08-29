@@ -20,12 +20,14 @@ class Task extends Model
         'remember_date',
         'action_type',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'reminder_sent_at',
     ];
 
     protected $casts = [
         'schedule_date' => 'datetime',
         'remember_date' => 'datetime',
+        'reminder_sent_at' => 'datetime',
     ];
 
 
