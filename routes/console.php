@@ -16,6 +16,7 @@ $appTimezone = $timezone ?? 'UTC';
 
 // 3. Programar los comandos usando la zona horaria dinámica.
 Schedule::command('crm:send-task-digests')->dailyAt('7:00')->timezone($appTimezone);
+Schedule::command('crm:sync-inboxes')->everyMinute();
 Schedule::command('crm:update-overdue-tasks')->hourly()->timezone($appTimezone);
 Schedule::command('crm:process-sequences')->everyMinute(); // Este no necesita timezone porque se ejecuta constantemente.
 Schedule::command('crm:send-task-reminders')->everyMinute();

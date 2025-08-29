@@ -200,12 +200,22 @@ class ProcessSequences extends Command
         ]);
 
         // 4. Creamos la actividad visible para el usuario y la enlazamos
+        $emailTo = [];
+        $emailTo[] = $contact->email;
+        // pasar a texto y HTML
+        $plainTextDescription = strip_tags($finalBody);
+
+
         Activity::create([
             'contact_id' => $contact->id,
             'email_log_id' => $emailLog->id,
             'type' => 'correo',
             'title' => '[Correo de Secuencia] - ' . $template->name,
-            'description' => "Asunto: \"{$finalSubject}\"",
+            'description' => $plainTextDescription,
+            'html_description' => $finalBody,
+            'email_to' => $emailTo,
+            'sender_email' => $owner->email ?? config('mail.from.address'),
+            'sender_name' => $owner->name ?? config('mail.from.name'),
             'created_by' => null, // Actividad creada por el sistema
         ]);
 

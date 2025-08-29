@@ -9,7 +9,7 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         // Devuelve las últimas 10 notificaciones no leídas
-        $notifications = $request->user()->unreadNotifications()->latest()->take(10)->get();
+        $notifications = $request->user()->unreadNotifications()->latest()->get();
         return response()->json($notifications);
     }
 

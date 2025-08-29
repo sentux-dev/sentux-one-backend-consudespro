@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Crm\ActivityAttachment;
+use App\Notifications\NewEmailReceivedNotification;
+use App\Models\User;
 
 class MailSyncService
 {
@@ -140,6 +142,11 @@ class MailSyncService
             ]);
 
             $this->storeNonInlineAttachments($message, $account, $activity);
+
+            $userToNotify = $account->user;
+            if ($userToNotify) {
+                $userToNotify->notify(new NewEmailReceivedNotification($activity));
+            }
 
             Log::info('Sync: actividad creada', [
                 'activity_id' => $activity->id ?? null,
