@@ -11,7 +11,11 @@ class EmailLog extends Model
     protected $table = 'marketing_email_logs';
     protected $fillable = [
         'campaign_id', 'contact_id', 'provider_message_id', 
-        'status', 'error_message', 'opened_at', 'clicked_at'
+        'status', 'error_message', 'opened_at', 'clicked_at', 'meta'
+    ];
+
+    protected $casts = [
+        'meta' => 'array',
     ];
 
     public function campaign()

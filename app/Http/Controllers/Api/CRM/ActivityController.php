@@ -157,6 +157,10 @@ class ActivityController extends Controller
         $emailLog = null;
         if ($a->relationLoaded('emailLog') && $a->emailLog) {
             $emailLog = [
+                'meta'   => $a->emailLog->meta,
+                'to'     => $a->emailLog->to,
+                'cc'     => $a->emailLog->cc,
+                'bcc'    => $a->emailLog->bcc,
                 'status' => $a->emailLog->status,
             ];
         }
@@ -165,12 +169,14 @@ class ActivityController extends Controller
         $attachments = [];
         if ($a->relationLoaded('attachments')) {
             $attachments = $a->attachments->map(function ($att) {
+                /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+                $disk = Storage::disk('public');
                 return [
                     'id'        => $att->id,
                     'filename'  => $att->filename,
                     'mime_type' => $att->mime_type,
                     'size'      => $att->size,
-                    'url'       => Storage::disk('public')->url($att->path),
+                    'url'       => $disk->url($att->path),
                     'is_inline' => (bool) $att->is_inline,
                 ];
             })->values()->all();
@@ -185,11 +191,17 @@ class ActivityController extends Controller
             'html_description'   => $a->html_description,
             'has_inline_images'  => (bool) $a->has_inline_images,
             'created_at'         => optional($a->created_at)->toIso8601String(),
+            'parent_activity_id' => $a->parent_activity_id,
             'created_by_name'    => $createdByName,
 
             // Remitente para correos entrantes
             'sender_name'        => $isIncomingEmail ? $senderName  : null,
             'sender_email'       => $isIncomingEmail ? $senderEmail : null,
+
+            // Destinatarios
+            'email_to'           => $a->email_to,
+            'email_cc'           => $a->email_cc,
+            'email_bcc'          => $a->email_bcc,
 
             'email_log'          => $emailLog,
             'attachments'        => $attachments,

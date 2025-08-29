@@ -263,6 +263,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('lead-sources', LeadSourceController::class);
 
         Route::post('emails/send', [EmailController::class, 'send']);
+        Route::post('emails/reply', [EmailController::class, 'reply']);
     });
 
     // Sales

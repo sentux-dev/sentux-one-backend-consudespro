@@ -29,6 +29,7 @@ class UserEmailAccount extends Model
         'last_sync_at',
         'sync_error_message',
         'last_sync_uid',
+        'last_uidvalidity',
     ];
 
     /**
@@ -49,6 +50,8 @@ class UserEmailAccount extends Model
         'password' => 'encrypted', // ¡Importante! Encripta y desencripta automáticamente
         'is_active' => 'boolean',
         'last_sync_at' => 'datetime',
+        'last_sync_uid'    => 'integer',
+        'last_uidvalidity' => 'string',
     ];
 
     /**
