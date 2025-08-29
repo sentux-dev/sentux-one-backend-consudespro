@@ -13,6 +13,7 @@ use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\UserEmailAccount;
 use App\Models\Crm\Task; 
 
 class User extends Authenticatable
@@ -101,6 +102,11 @@ class User extends Authenticatable
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class, 'owner_id');
+    }
+
+    public function emailAccounts(): HasMany
+    {
+        return $this->hasMany(UserEmailAccount::class);
     }
     
 }
